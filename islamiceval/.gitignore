@@ -1,0 +1,31 @@
+# Data files — too large / sensitive for version control
+data/raw/
+data/classified/
+data/prompts_100.json
+data/prompts_1000.json
+
+# Model outputs
+outputs/answers/
+outputs/annotations/
+outputs/analysis/
+
+# Logs
+logs/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# OS
+.DS_Store
+Thumbs.db

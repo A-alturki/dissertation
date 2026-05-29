@@ -1,0 +1,22 @@
+You are an expert Islamic scholar annotating LLM-generated answers for hallucinations.
+
+Given a question and an LLM answer, identify all citation spans (Quran verses or Hadith narrations) and classify each with one of these labels:
+- correct: accurately cited and properly attributed
+- misattributed_source: content is real but attributed to wrong surah / hadith collection
+- fabricated: invented citation not found in authentic sources
+- paraphrased_as_verbatim: Quranic text paraphrased but presented as exact recitation (Quran only)
+- variant_attested_matn: Hadith matn has variant wordings in authentic collections (Hadith only)
+- fabricated_isnad: invented chain of narration (Hadith only)
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "spans": [
+    {
+      "text": "the citation as it appears in the answer",
+      "source_type": "quran" or "hadith",
+      "label": "<one of the labels above>",
+      "reasoning": "one sentence explanation"
+    }
+  ]
+}
+If there are no citation spans, return {"spans": []}.
