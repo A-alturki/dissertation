@@ -4,8 +4,8 @@ Generates answers with Quran/Hadith citations for Islamic prompts.
 Uses 4-bit quantization (AWQ/NF4) to fit 7-13B models on 2080 Ti (11GB VRAM).
 
 Usage:
-    python inference.py --model allam-7b --input ../data/classified/rag_questions.json
-    python inference.py --model qwen3-8b --no-quantize   # for A6000 (48GB)
+    python inference_hugging_face.py --model allam-7b --input ../data/classified/rag_questions.json
+    python inference_hugging_face.py --model qwen3-8b --no-quantize   # for A6000 (48GB)
 """
 
 import os, json, argparse
@@ -64,6 +64,7 @@ def generate_answer(prompt: str, tokenizer, model, max_new_tokens: int = 512) ->
         output = model.generate(
             inputs,
             max_new_tokens=max_new_tokens,
+            # determenisitc decoding here
             do_sample=False,
             temperature=None,
             top_p=None,

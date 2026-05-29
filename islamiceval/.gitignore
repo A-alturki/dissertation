@@ -1,8 +1,6 @@
 # Data files — too large / sensitive for version control
-data/raw/
-data/classified/
-data/prompts_100.json
-data/prompts_1000.json
+data/raw/*
+data/data_experiments/*
 
 # Model outputs
 outputs/answers/
@@ -29,3 +27,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+
+# claude md files
+CLAUDE.md
