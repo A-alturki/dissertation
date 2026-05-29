@@ -57,19 +57,19 @@ def generate_answer(prompt: str, tokenizer, model, max_new_tokens: int = 512) ->
         {"role": "user",   "content": prompt},
     ]
     inputs = tokenizer.apply_chat_template(
-        messages, tokenize=True, add_generation_prompt=True, return_tensors="pt"
+        messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
     ).to(model.device)
 
     with torch.no_grad():
         output = model.generate(
-            inputs,
+            **inputs,
             max_new_tokens=max_new_tokens,
             # determenisitc decoding here
             do_sample=False,
             temperature=None,
             top_p=None,
         )
-    generated = output[0][inputs.shape[-1]:]
+    generated = output[0][inputs["input_ids"].shape[-1]:]
     return tokenizer.decode(generated, skip_special_tokens=True).strip()
 
 
