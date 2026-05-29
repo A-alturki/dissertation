@@ -34,7 +34,8 @@ cp $data_path/* $scratch_path/data/
 
 # configure the model, input, and tensor parallelism (if needed)
 MODEL=${1:-allam-7b}
-INPUT=${2:-$scratch_path/data/rag_questions.json}
+# change the path depending on the input file we want to use
+INPUT=${2:-$scratch_path/data/prompts_10.json}
 TENSOR_PARALLEL=${3:-1}
 
 inference_file="$HOME/dissertation/islamiceval/scripts/inference_hugging_face.py"
