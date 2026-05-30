@@ -13,6 +13,12 @@ from vllm import LLM, SamplingParams
 
 NO_SYSTEM_ROLE = {"jais-13b", "acegpt-8b"}
 
+# Gemma-3 is multimodal (vision+text). vLLM profiles the vision encoder at
+# startup even for text-only inference, which OOMs on small MIG slices.
+# Passing limit_mm_per_prompt={"image": 0} skips that profiling.
+# All other models in MODELS are text-only — don't pass this param to them.
+MULTIMODAL_MODELS = {"gemma-3-4b", "gemma-3-12b", "gemma-3-27b"}
+
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
     "مستنداً إلى القرآن الكريم والأحاديث النبوية الشريفة.\n"
@@ -60,12 +66,18 @@ def main():
 
     model_id = MODELS[args.model]
     print(f"Loading {args.model} with vLLM ({model_id})  tp={args.tensor_parallel}")
-    llm = LLM(
+    llm_kwargs = dict(
         model=model_id,
         tensor_parallel_size=args.tensor_parallel,
         trust_remote_code=True,
         dtype="auto",
+        max_model_len=4096,
+        gpu_memory_utilization=0.90,
     )
+    if args.model in MULTIMODAL_MODELS:
+        llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
+
+    llm = LLM(**llm_kwargs)
     tokenizer = llm.get_tokenizer()
     
     # We use deterministic decoding for evaluation here but we can change it later.
