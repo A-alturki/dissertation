@@ -54,11 +54,10 @@ echo "========================================"
 
 # run the inference script
 python "$inference_file" \
-    --model          "$MODEL" \
-    --input          "$INPUT" \
-    --output-dir     "$OUTPUT_DIR" \
-    --max-tokens     512 \
-    # tensor parralel only works for vllm inference
+    --model           "$MODEL" \
+    --input           "$INPUT" \
+    --output-dir      "$OUTPUT_DIR" \
+    --max-tokens      512 \
     --tensor-parallel "$TENSOR_PARALLEL"
 
 EXIT_CODE=$?
