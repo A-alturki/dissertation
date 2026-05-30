@@ -17,8 +17,8 @@
 #SBATCH --mem=48G
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=/home/s2870640/dissertation/logs/%j_%x.out
-#SBATCH --error=/home/s2870640/dissertation/logs/%j_%x.err
+#SBATCH --output=/home/s2870640/dissertation/islamiceval/logs/%j_%x.out
+#SBATCH --error=/home/s2870640/dissertation/islamiceval/logs/%j_%x.err
 
 . /home/htang2/toolchain-20251006/toolchain.rc
 source ~/venv/bin/activate

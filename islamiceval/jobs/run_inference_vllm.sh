@@ -17,11 +17,16 @@
 #SBATCH --mem=48G
 #SBATCH --gres=gpu:1
 #SBATCH --time=12:00:00
-#SBATCH --output=/home/s2870640/dissertation/logs/%j_%x.out
-#SBATCH --error=/home/s2870640/dissertation/logs/%j_%x.err
+#SBATCH --output=/home/s2870640/dissertation/islamiceval/logs/%j_%x.out
+#SBATCH --error=/home/s2870640/dissertation/islamiceval/logs/%j_%x.err
 
 . /home/htang2/toolchain-20251006/toolchain.rc
 source ~/venv/bin/activate
+
+# vLLM cannot parse MIG UUIDs (e.g. "MIG-xxxx") as integer device IDs.
+# SLURM sets CUDA_VISIBLE_DEVICES to the MIG UUID — reset it to 0 so vLLM
+# sees a plain integer index while still being scoped to the allocated slice.
+export CUDA_VISIBLE_DEVICES=0
 
 # location of data to copy from to scratch
 data_path="$HOME/dissertation/islamiceval/data/classified/"
