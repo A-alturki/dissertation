@@ -67,8 +67,12 @@ python "$inference_file" \
 
 EXIT_CODE=$?
 
-mkdir -p "$HOME/dissertation/islamiceval/outputs/"
-cp -r "$OUTPUT_DIR"/* "$HOME/dissertation/islamiceval/outputs/"
+if [ $EXIT_CODE -eq 0 ] && [ -d "$OUTPUT_DIR" ]; then
+    mkdir -p "$HOME/dissertation/islamiceval/outputs/"
+    cp -r "$OUTPUT_DIR"/* "$HOME/dissertation/islamiceval/outputs/"
+else
+    echo "Skipping copy — inference failed or output dir missing."
+fi
 
 echo "========================================"
 echo "Finished : $(date)"

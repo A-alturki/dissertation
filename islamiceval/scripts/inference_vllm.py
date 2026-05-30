@@ -64,7 +64,7 @@ def main():
         model=model_id,
         tensor_parallel_size=args.tensor_parallel,
         trust_remote_code=True,
-        dtype="float16",
+        dtype="auto",
     )
     tokenizer = llm.get_tokenizer()
     
