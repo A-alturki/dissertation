@@ -3,13 +3,13 @@
 # University of Edinburgh cluster (Teaching / ICF-Research partitions)
 #
 # Usage:
-#   sbatch run_inference.sh allam-7b
-#   sbatch run_inference.sh qwen3-8b ../data/classified/rag_questions.json
-#   sbatch --gres=gpu:4 run_inference.sh llama-3.3-70b ../data/classified/rag_questions.json 4
+#   sbatch run_inference_vllm.sh allam-7b
+#   sbatch run_inference_vllm.sh qwen3-8b ../data/classified/rag_questions.json
+#   sbatch --gres=gpu:4 run_inference_vllm.sh llama-3.3-70b ../data/classified/rag_questions.json 4
 #
-# For A6000 nodes (48GB): sbatch -p Teaching --nodelist=landonia11 run_inference.sh qwen3-32b
+# For A6000 nodes (48GB): sbatch -p Teaching --nodelist=landonia11 run_inference_vllm.sh qwen3-32b
 
-#SBATCH --job-name=islamiceval
+#SBATCH --job-name=tueki-IE
 #SBATCH --partition=Teaching
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
@@ -33,12 +33,12 @@ mkdir -p $scratch_path/outputs
 cp $data_path/* $scratch_path/data/
 
 # configure the model, input, and tensor parallelism (if needed)
-MODEL=${1:-allam-7b}
+MODEL=${1:-gemma-3-4b}
 # change the path depending on the input file we want to use
 INPUT=${2:-$scratch_path/data/prompts_10.json}
 TENSOR_PARALLEL=${3:-1}
 
-inference_file="$HOME/dissertation/islamiceval/scripts/inference_hugging_face.py"
+inference_file="$HOME/dissertation/islamiceval/scripts/inference_vllm.py"
 
 OUTPUT_DIR="$scratch_path/outputs/${MODEL}_tp${TENSOR_PARALLEL}_$(date +%Y%m%d_%H%M%S)"
 
@@ -58,8 +58,8 @@ python "$inference_file" \
     --input          "$INPUT" \
     --output-dir     "$OUTPUT_DIR" \
     --max-tokens     512 \
-    # tensor parralel only works for hugging face inference
-    # --tensor-parallel "$TENSOR_PARALLEL"
+    # tensor parralel only works for vllm inference
+    --tensor-parallel "$TENSOR_PARALLEL"
 
 EXIT_CODE=$?
 

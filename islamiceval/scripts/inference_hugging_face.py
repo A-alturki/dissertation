@@ -13,6 +13,10 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from tqdm.auto import tqdm
 
+# Models whose chat templates don't accept a system role — system prompt is
+# folded into the first user message instead.
+NO_SYSTEM_ROLE = {"jais-13b", "acegpt-8b"}
+
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
     "مستنداً إلى القرآن الكريم والأحاديث النبوية الشريفة.\n"
@@ -20,6 +24,7 @@ SYSTEM_PROMPT = (
     "عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ) إن أمكن."
 )
 
+# used same models as islamiceval + mistral/acegpt/silma 
 MODELS = {
     "allam-7b":     "ALLaM-AI/ALLaM-7B-Instruct-preview",
     "jais-13b":     "inceptionai/jais-13b-chat",
@@ -51,11 +56,18 @@ def load_model(model_id: str, quantize: bool = True):
     return tokenizer, model
 
 
-def generate_answer(prompt: str, tokenizer, model, max_new_tokens: int = 512) -> str:
-    messages = [
+def build_messages(prompt: str, model_key: str) -> list:
+    if model_key in NO_SYSTEM_ROLE:
+        # Fold system prompt into the user turn for models without system role support
+        return [{"role": "user", "content": f"{SYSTEM_PROMPT}\n\n{prompt}"}]
+    return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user",   "content": prompt},
     ]
+
+
+def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_tokens: int = 512) -> str:
+    messages = build_messages(prompt, model_key)
     inputs = tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
     ).to(model.device)
@@ -64,7 +76,6 @@ def generate_answer(prompt: str, tokenizer, model, max_new_tokens: int = 512) ->
         output = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            # determenisitc decoding here
             do_sample=False,
             temperature=None,
             top_p=None,
@@ -90,20 +101,36 @@ def main():
     tokenizer, model = load_model(model_id, quantize=not args.no_quantize)
     print("Model loaded.")
 
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, f"{args.model}.json")
+
+    # Resume: skip prompts already processed
+    done_ids = set()
     results = []
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            results = json.load(f)
+        done_ids = {r["id"] for r in results}
+        print(f"Resuming — {len(done_ids)} already done, {len(prompts) - len(done_ids)} remaining.")
+
     for item in tqdm(prompts, desc=args.model):
-        answer = generate_answer(item["prompt"], tokenizer, model, args.max_tokens)
+        if item["id"] in done_ids:
+            continue
+        try:
+            answer = generate_answer(item["prompt"], tokenizer, model, args.model, args.max_tokens)
+        except Exception as e:
+            print(f"\nError on id={item['id']}: {e}")
+            answer = f"ERROR: {e}"
         results.append({
             "id":     item["id"],
             "prompt": item["prompt"],
             "answer": answer,
             "model":  args.model,
         })
+        # Save after every prompt so a crash loses at most one item
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, f"{args.model}.json")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
     print(f"Saved {len(results)} answers -> {out_path}")
 
 

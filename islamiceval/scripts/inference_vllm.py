@@ -10,7 +10,8 @@ Usage:
 
 import os, json, argparse
 from vllm import LLM, SamplingParams
-from tqdm.auto import tqdm
+
+NO_SYSTEM_ROLE = {"jais-13b", "acegpt-8b"}
 
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
@@ -66,22 +67,38 @@ def main():
         dtype="float16",
     )
     tokenizer = llm.get_tokenizer()
+    
+    # We use deterministic decoding for evaluation here but we can change it later.
     sampling  = SamplingParams(temperature=0, max_tokens=args.max_tokens)
 
-    conversations = [
-        tokenizer.apply_chat_template(
-            [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": item["prompt"]},
-            ],
-            tokenize=False,
-            add_generation_prompt=True,
-        )
-        for item in prompts
-    ]
+    def build_messages(item):
+        if args.model in NO_SYSTEM_ROLE:
+            return [{"role": "user", "content": f"{SYSTEM_PROMPT}\n\n{item['prompt']}"}]
+        return [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user",   "content": item["prompt"]},
+        ]
 
-    print(f"Generating {len(conversations)} answers...")
-    outputs = llm.generate(conversations, sampling)
+    conversations = []
+    for item in prompts:
+        try:
+            text = tokenizer.apply_chat_template(
+                build_messages(item), tokenize=False, add_generation_prompt=True
+            )
+        except Exception as e:
+            print(f"Template error on id={item['id']}: {e} — skipping")
+            text = None
+        conversations.append(text)
+
+    valid_indices = [i for i, c in enumerate(conversations) if c is not None]
+    valid_convs   = [conversations[i] for i in valid_indices]
+    valid_prompts = [prompts[i] for i in valid_indices]
+    skipped = len(prompts) - len(valid_indices)
+    if skipped:
+        print(f"Warning: {skipped} prompts skipped due to template errors.")
+
+    print(f"Generating {len(valid_convs)} answers...")
+    outputs = llm.generate(valid_convs, sampling)
 
     results = [
         {
@@ -90,7 +107,7 @@ def main():
             "answer": out.outputs[0].text.strip(),
             "model":  args.model,
         }
-        for item, out in zip(prompts, outputs)
+        for item, out in zip(valid_prompts, outputs)
     ]
 
     os.makedirs(args.output_dir, exist_ok=True)
