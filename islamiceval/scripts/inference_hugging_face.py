@@ -15,7 +15,10 @@ from tqdm.auto import tqdm
 
 # Models whose chat templates don't accept a system role — system prompt is
 # folded into the first user message instead.
-NO_SYSTEM_ROLE = {"jais-13b", "acegpt-8b"}
+NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
+
+NO_THINKING = {"fanar-2-27b", "deepseek-r1-llama-8b", "deepseek-r1-qwen-32b",
+               "deepseek-r1-llama-70b"}
 
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
@@ -26,14 +29,62 @@ SYSTEM_PROMPT = (
 
 # used same models as islamiceval + mistral/acegpt/silma 
 MODELS = {
-    "allam-7b":     "ALLaM-AI/ALLaM-7B-Instruct-preview",
-    "jais-13b":     "inceptionai/jais-13b-chat",
-    "qwen3-8b":     "Qwen/Qwen3-8B",
-    "llama-3.1-8b": "meta-llama/Llama-3.1-8B-Instruct",
-    "gemma-3-4b":   "google/gemma-3-4b-it",
-    "mistral-7b":   "mistralai/Mistral-7B-Instruct-v0.3",
-    "acegpt-8b":    "FreedomIntelligence/AceGPT-v2-8B-Chat",
-    "silma-9b":     "silma-ai/SILMA-9B-Instruct-v1.0",
+    # ==================== Arabic-centric ====================
+    "allam-7b":              "ALLaM-AI/ALLaM-7B-Instruct-preview",
+    "jais-13b":              "inceptionai/jais-13b-chat",
+    "acegpt-8b":             "FreedomIntelligence/AceGPT-v2-8B-Chat",
+    "silma-9b":              "silma-ai/SILMA-9B-Instruct-v1.0",
+    "fanar-1-9b":            "QCRI/Fanar-1-9B-Instruct",
+    "fanar-2-27b":           "QCRI/Fanar-2-27B-Instruct",
+
+    # ==================== Qwen family ======================
+    "qwen3-0.6b":            "Qwen/Qwen3-0.6B",
+    "qwen3-1.7b":            "Qwen/Qwen3-1.7B",
+    "qwen3-4b":              "Qwen/Qwen3-4B",
+    "qwen3-8b":              "Qwen/Qwen3-8B",
+    "qwen3-14b":             "Qwen/Qwen3-14B",
+    "qwen3-30b-a3b":         "Qwen/Qwen3-30B-A3B",           # MoE, 3B active
+
+    # ==================== Llama family (gated) ==============
+    "llama-3.2-3b":          "meta-llama/Llama-3.2-3B-Instruct",
+    "llama-3.1-8b":          "meta-llama/Llama-3.1-8B-Instruct",
+    "llama-4-scout":         "meta-llama/Llama-4-Scout-17B-16E-Instruct",  # MoE
+
+    # ==================== Gemma family (gated) ==============
+    "gemma-3-4b":            "google/gemma-3-4b-it",
+    "gemma-3-12b":           "google/gemma-3-12b-it",
+    "gemma-3-27b":           "google/gemma-3-27b-it",
+
+    # ==================== Mistral family ====================
+    "mistral-7b":            "mistralai/Mistral-7B-Instruct-v0.3",
+    "mistral-small-24b":     "mistralai/Mistral-Small-Instruct-2409",
+    "mixtral-8x7b":          "mistralai/Mixtral-8x7B-Instruct-v0.1",  # MoE
+
+    # ==================== DeepSeek family ===================
+    "deepseek-r1-llama-8b":  "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+
+    # ==================== Other =============================
+    "phi-4-14b":             "microsoft/phi-4",
+    "glm-4-9b":              "THUDM/glm-4-9b-chat",
+    "command-r-7b":          "CohereForAI/c4ai-command-r7b-12-2024",
+
+    # ==========================================================
+    # HEAVY COMPUTE — need A100 80GB+ or multi-GPU
+    # ==========================================================
+
+    # 1x A100 80GB
+    "qwen3-32b":             "Qwen/Qwen3-32B",
+    "deepseek-r1-qwen-32b":  "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "llama-3.3-70b":         "meta-llama/Llama-3.3-70B-Instruct",        # tight, may need quantization
+    "jais-70b":              "inceptionai/jais-adapted-70b-chat",
+
+    # 2x A100 80GB
+    "deepseek-r1-llama-70b": "deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+
+    # 4x A100 80GB
+    "qwen3-235b":            "Qwen/Qwen3-235B-A22B",                     # MoE, 22B active
+    "llama-4-maverick":      "meta-llama/Llama-4-Maverick-17B-128E-Instruct",  # MoE
+    "deepseek-v3":           "deepseek-ai/DeepSeek-V3-0324",             # 685B MoE, 37B active
 }
 
 
@@ -68,8 +119,10 @@ def build_messages(prompt: str, model_key: str) -> list:
 
 def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_tokens: int = 512) -> str:
     messages = build_messages(prompt, model_key)
+    extra = {"no_thinking": True} if model_key in NO_THINKING else {}
     inputs = tokenizer.apply_chat_template(
-        messages, tokenize=True, add_generation_prompt=True, return_tensors="pt", return_dict=True
+        messages, tokenize=True, add_generation_prompt=True,
+        return_tensors="pt", return_dict=True, **extra
     ).to(model.device)
 
     with torch.no_grad():
