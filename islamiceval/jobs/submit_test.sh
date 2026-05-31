@@ -8,8 +8,8 @@
 
 TEST_MODELS=(
     "gemma-3-4b"      # multimodal model — tests limit_mm_per_prompt fix
-    "qwen3-8b"        # standard ChatML template
-    "llama-3.1-8b"    # Llama template
+    "qwen3-4b"        # standard ChatML template
+    "llama-3.1-3b"    # Llama template
     "jais-13b"        # no system role — tests NO_SYSTEM_ROLE fallback
     "mistral-7b"      # Mistral template
     "allam-7b"        # Arabic-centric
