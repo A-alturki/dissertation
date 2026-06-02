@@ -30,3 +30,7 @@ Thumbs.db
 
 # claude md files
 CLAUDE.md
+WORK_LOG.md
+
+# PDF
+*.pdf

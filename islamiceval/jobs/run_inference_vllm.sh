@@ -28,10 +28,14 @@ source ~/venv/bin/activate
 # sees a plain integer index while still being scoped to the allocated slice.
 export CUDA_VISIBLE_DEVICES=0
 
-# location of data to copy from to scratch
+# location of data — use /disk/scratch if available, else fall back to /tmp
 data_path="$HOME/dissertation/islamiceval/data/classified/"
-scratch_path="/disk/scratch/s2870640/islamiceval"
-mkdir -p $scratch_path/data
+if mkdir -p /disk/scratch/s2870640/islamiceval/data 2>/dev/null; then
+    scratch_path="/disk/scratch/s2870640/islamiceval"
+else
+    scratch_path="/tmp/s2870640/islamiceval"
+    mkdir -p $scratch_path/data
+fi
 mkdir -p $scratch_path/outputs
 
 # copy the files to scratch from data directory

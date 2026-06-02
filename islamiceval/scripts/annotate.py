@@ -1,126 +1,193 @@
 """
-Stage 3: Frontier LLM Annotation Pipeline
-Uses an ensemble of frontier LLMs (GPT-4o, Claude Opus) to annotate citation
-spans in model-generated answers with fine-grained hallucination labels.
+Stage 3 (Subtask A): Frontier-LLM span detection with the Gemini API.
 
-Only samples with 100% cross-annotator agreement are kept as gold labels.
-Disagreements are saved separately for expert adjudication.
+Gemini reads each answer and returns every Qur'an / Hadith citation it finds as
+{text, type, start, end}. We store its output VERBATIM — including the start/end
+indices it produces. The point of the annotation tool is to *measure* how accurate
+Gemini is, both at the source attribution (q/h, and whether the citation is real)
+and at the character offsets, so we deliberately do NOT auto-correct anything.
 
-Labels:
-  - correct                  (Quran + Hadith)
-  - misattributed_source     (Quran + Hadith)
-  - fabricated               (Quran + Hadith)
-  - paraphrased_as_verbatim  (Quran only)
-  - variant_attested_matn    (Hadith only)
-  - fabricated_isnad         (Hadith only)
+Indices are sent to Gemini and stored against the answer text EXACTLY as it is in
+the answers file (no normalization), so the annotation tool — which loads the same
+file — shows the answer in the same frame Gemini saw.
+
+Optional: pass --auto-index to (re)compute start/end in Python via exact / diacritic
+-stripped search. This is a fallback to use only if Gemini's own indices turn out
+unreliable; it is OFF by default.
+
+Output (Format B, what the annotation tool consumes):
+    {"spans": [{"id", "type", "text", "start", "end"}, ...]}
 
 Usage:
+    python annotate.py --input ../outputs/answers/allam-7b.json --limit 3   # smoke test
     python annotate.py --input ../outputs/answers/allam-7b.json
+    python annotate.py --input ../outputs/answers/allam-7b.json --auto-index # opt-in matching
+
+Requires GEMINI_API_KEY (or GOOGLE_API_KEY) in .env.
 """
 
-import os, json, time, argparse
-from openai import OpenAI
-from anthropic import Anthropic
+import os, re, json, time, argparse
+from google import genai
+from google.genai import types
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
-load_dotenv()
-openai_client    = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-anthropic_client = Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+DEFAULT_MODEL = "gemini-3.1-pro-preview"
 
-ANNOTATION_PROMPT = """You are an expert Islamic scholar annotating LLM-generated answers for hallucinations.
+# ── Optional Python matching (only used with --auto-index) ──────────────────────
+_DIAC = re.compile(r'[ً-ٰۖ-ۜ۟-۪ۤۧۨ-ۭ]')
+def is_diac(c):    return bool(_DIAC.match(c))
+def strip_diac(t): return _DIAC.sub('', t)
 
-Given a question and an LLM answer, identify all citation spans (Quran verses or Hadith narrations) and classify each with one of these labels:
-- correct: accurately cited and properly attributed
-- misattributed_source: content is real but attributed to wrong surah / hadith collection
-- fabricated: invented citation not found in authentic sources
-- paraphrased_as_verbatim: Quranic text paraphrased but presented as exact recitation (Quran only)
-- variant_attested_matn: Hadith matn has variant wordings in authentic collections (Hadith only)
-- fabricated_isnad: invented chain of narration (Hadith only)
+def find_in_answer(ans_text, query):
+    """Return (start, end, method) for `query` in `ans_text`, in the same string
+    frame as `ans_text`. exact -> diacritic-stripped fallback."""
+    idx = ans_text.find(query)
+    if idx != -1:
+        end = idx + len(query)
+        while end < len(ans_text) and is_diac(ans_text[end]):
+            end += 1
+        return idx, end, 'exact'
 
-Respond ONLY with valid JSON in this exact format:
-{
-  "spans": [
-    {
-      "text": "the citation as it appears in the answer",
-      "source_type": "quran" or "hadith",
-      "label": "<one of the labels above>",
-      "reasoning": "one sentence explanation"
-    }
-  ]
-}
-If there are no citation spans, return {"spans": []}."""
+    a_s, q_s = strip_diac(ans_text), strip_diac(query)
+    idx = a_s.find(q_s)
+    if idx == -1:
+        return None, None, None
+    count, orig_start = 0, -1
+    for i, c in enumerate(ans_text):
+        if count == idx: orig_start = i; break
+        if not is_diac(c): count += 1
+    count, orig_end = 0, len(ans_text)
+    for i in range(orig_start, len(ans_text)):
+        if not is_diac(ans_text[i]):
+            count += 1
+            if count == len(q_s):
+                j = i + 1
+                while j < len(ans_text) and is_diac(ans_text[j]): j += 1
+                orig_end = j; break
+    return orig_start, orig_end, 'stripped'
 
+# ── Gemini ──────────────────────────────────────────────────────────────────────
+SYSTEM_PROMPT = """You are an expert in the Qur'an and Hadith. You are given an Arabic answer produced by an LLM. Find every span in the answer that represents a quotation of the Quran or hadith, whether correct or hallucinated.
 
-def annotate_gpt4o(question: str, answer: str) -> dict:
-    resp = openai_client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": ANNOTATION_PROMPT},
-            {"role": "user",   "content": f"Question: {question}\n\nAnswer: {answer}"},
-        ],
-        response_format={"type": "json_object"},
-        temperature=0,
-    )
-    return json.loads(resp.choices[0].message.content)
+For each citation span return four fields:
+- "text": the quoted Qur'an / Hadith text copied EXACTLY and VERBATIM from the answer, character-for-character. Do NOT add, drop, reorder, or normalize any diacritics (tashkeel). Copy it precisely as it appears.
+  * Do NOT include surrounding quotation marks, curly braces { }, brackets, or parentheses.
+  * Do NOT include the source reference that follows the quote, e.g. "(النحل: 90)" or "(رواه البخاري)".
+  * Include ONLY the quoted scripture / narration text itself.
+- "type": "q" for a Qur'an quotation, "h" for a Hadith quotation.
+- "start": the 0-based index of the FIRST character of "text" within the answer string.
+- "end": the 0-based index ONE PAST the last character of "text", so that answer[start:end] == text exactly.
 
+Index every Unicode character, including spaces, punctuation, newlines, and diacritics. The answer string is given to you exactly as stored.
 
-def annotate_claude(question: str, answer: str) -> dict:
-    resp = anthropic_client.messages.create(
-        model="claude-opus-4-7",
-        max_tokens=2048,
-        system=ANNOTATION_PROMPT,
-        messages=[{"role": "user", "content": f"Question: {question}\n\nAnswer: {answer}"}],
-    )
-    return json.loads(resp.content[0].text)
+Only mark text the answer presents as an actual quotation. Do NOT mark paraphrase, commentary, or the model's own prose.
 
+Respond with ONLY valid JSON in exactly this shape:
+{"spans": [{"text": "...", "type": "q", "start": 0, "end": 0}]}
+If there are no quotations, respond with {"spans": []}.
+Do NOT output any other field, reasoning, or commentary."""
 
-def spans_agree(ann_a: dict, ann_b: dict) -> bool:
-    a = {s["text"]: s["label"] for s in ann_a.get("spans", [])}
-    b = {s["text"]: s["label"] for s in ann_b.get("spans", [])}
-    return a == b
+def _parse_json(raw):
+    raw = raw.strip()
+    if raw.startswith('```'):
+        raw = raw.split('```', 2)[1]
+        if raw.startswith('json'): raw = raw[4:]
+        raw = raw.strip().rstrip('`').strip()
+    return json.loads(raw)
 
+def detect_spans(client, model, question, answer, retries=3):
+    """One Gemini call for one answer; returns its raw list of span dicts."""
+    user = f"Question:\n{question}\n\nAnswer:\n{answer}"
+    last = None
+    for attempt in range(retries):
+        try:
+            resp = client.models.generate_content(
+                model=model,
+                contents=user,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0,
+                    response_mime_type="application/json",
+                ),
+            )
+            return _parse_json(resp.text).get('spans', [])
+        except Exception as e:
+            last = e
+            time.sleep(2 * (attempt + 1))
+    raise last
 
+# ── Main ────────────────────────────────────────────────────────────────────────
 def main():
-    parser = argparse.ArgumentParser(description="Annotate model answers (Stage 3)")
-    parser.add_argument("--input",      required=True, help="Path to model answers JSON")
-    parser.add_argument("--output-dir", default="../outputs/annotations/")
-    args = parser.parse_args()
+    ap = argparse.ArgumentParser(description="Subtask A span detection via Gemini")
+    ap.add_argument("--input",      required=True, help="answers JSON [{id,prompt,answer,model}]")
+    ap.add_argument("--output-dir", default="../outputs/annotations/")
+    ap.add_argument("--model",      default=DEFAULT_MODEL)
+    ap.add_argument("--limit",      type=int, default=None, help="annotate only first N answers")
+    ap.add_argument("--auto-index", action="store_true",
+                    help="OPT-IN: overwrite Gemini's start/end with a Python search "
+                         "(exact / diacritic-stripped). Off by default.")
+    args = ap.parse_args()
+
+    load_dotenv()
+    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        raise SystemExit("Set GEMINI_API_KEY (or GOOGLE_API_KEY) in .env")
+    client = genai.Client(api_key=api_key)
 
     with open(args.input, encoding="utf-8") as f:
         answers = json.load(f)
+    if not isinstance(answers, list):
+        answers = [answers]
+    if args.limit:
+        answers = answers[:args.limit]
 
     model_name = os.path.basename(args.input).replace(".json", "")
-    agreed, disagreed, errors = [], [], []
+    os.makedirs(args.output_dir, exist_ok=True)
+    out_path = os.path.join(args.output_dir, f"{model_name}_gemini_spans.json")
+
+    # Resume: keep ids already present in the output file
+    all_spans, done = [], set()
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            all_spans = json.load(f).get("spans", [])
+        done = {s["id"] for s in all_spans}
+
+    def save():
+        with open(out_path, "w", encoding="utf-8") as f:
+            json.dump({"spans": all_spans}, f, ensure_ascii=False, indent=2)
 
     for item in tqdm(answers, desc=f"annotating {model_name}"):
+        pid = item["id"]
+        if pid in done:
+            continue
+        answer = item.get("answer", "")      # exactly as stored — no normalization
         try:
-            ann_gpt4o  = annotate_gpt4o(item["prompt"], item["answer"])
-            time.sleep(0.5)
-            ann_claude = annotate_claude(item["prompt"], item["answer"])
-
-            if spans_agree(ann_gpt4o, ann_claude):
-                agreed.append({**item, "annotations": ann_gpt4o["spans"]})
-            else:
-                disagreed.append({
-                    **item,
-                    "gpt4o_annotations":  ann_gpt4o["spans"],
-                    "claude_annotations": ann_claude["spans"],
-                })
+            raw_spans = detect_spans(client, args.model, item.get("prompt", ""), answer)
         except Exception as e:
-            print(f"Error on id={item.get('id', '?')}: {e}")
-            errors.append({**item, "error": str(e)})
+            print(f"\nERROR id={pid}: {e}")
+            all_spans.append({"id": pid, "type": "q", "text": "",
+                              "start": None, "end": None, "error": str(e)})
+            save()
+            continue
 
-    os.makedirs(args.output_dir, exist_ok=True)
-    for suffix, data in [("agreed", agreed), ("disagreed", disagreed), ("errors", errors)]:
-        if data:
-            path = os.path.join(args.output_dir, f"{model_name}_{suffix}.json")
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
-            print(f"{suffix:12s}: {len(data):4d}  -> {path}")
+        for sp in raw_spans:
+            text  = sp.get("text", "")
+            typ   = sp.get("type", "q")
+            start = sp.get("start")
+            end   = sp.get("end")
+            if args.auto_index:                                  # opt-in fallback
+                s, e, _ = find_in_answer(answer, text.strip())
+                if s is not None:
+                    start, end = s, e
+            all_spans.append({"id": pid, "type": typ, "text": text,
+                              "start": start, "end": end})
+        save()
 
-    total = len(answers)
-    print(f"\nAgreement rate: {len(agreed)}/{total} = {len(agreed)/total:.1%}")
+    n = len([s for s in all_spans if not s.get("error")])
+    print(f"\nWrote {n} spans across {len(set(s['id'] for s in all_spans))} answers -> {out_path}")
+    print(f"  Verify:  python ../tools/annotation_server.py {args.input} {out_path}")
+    print(f"  (or load both files in tools/annotation_tool.html)")
 
 
 if __name__ == "__main__":

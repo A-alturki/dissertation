@@ -17,8 +17,21 @@ from tqdm.auto import tqdm
 # folded into the first user message instead.
 NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
 
-NO_THINKING = {"fanar-2-27b", "deepseek-r1-llama-8b", "deepseek-r1-qwen-32b",
-               "deepseek-r1-llama-70b"}
+# Per-model extra kwargs passed to apply_chat_template to disable thinking output.
+# DeepSeek-R1 models have no template flag — <think> blocks are stripped in post-processing.
+THINKING_KWARGS = {
+    "fanar-2-27b":           {"no_thinking": True},
+    "qwen3-0.6b":            {"enable_thinking": False},
+    "qwen3-1.7b":            {"enable_thinking": False},
+    "qwen3-4b":              {"enable_thinking": False},
+    "qwen3-8b":              {"enable_thinking": False},
+    "qwen3-14b":             {"enable_thinking": False},
+    "qwen3-30b-a3b":         {"enable_thinking": False},
+    "qwen3-32b":             {"enable_thinking": False},
+}
+
+# Models whose <think> blocks must be stripped in post-processing (no template flag).
+STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b"}
 
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
@@ -75,7 +88,7 @@ MODELS = {
     # 1x A100 80GB
     "qwen3-32b":             "Qwen/Qwen3-32B",
     "deepseek-r1-qwen-32b":  "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
-    "llama-3.3-70b":         "meta-llama/Llama-3.3-70B-Instruct",        # tight, may need quantization
+    "llama-3.3-70b":         "meta-llama/Llama-3.3-70B-Instruct",       
     "jais-70b":              "inceptionai/jais-adapted-70b-chat",
 
     # 2x A100 80GB
@@ -119,7 +132,7 @@ def build_messages(prompt: str, model_key: str) -> list:
 
 def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_tokens: int = 512) -> str:
     messages = build_messages(prompt, model_key)
-    extra = {"no_thinking": True} if model_key in NO_THINKING else {}
+    extra = THINKING_KWARGS.get(model_key, {})
     inputs = tokenizer.apply_chat_template(
         messages, tokenize=True, add_generation_prompt=True,
         return_tensors="pt", return_dict=True, **extra
@@ -134,7 +147,11 @@ def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_token
             top_p=None,
         )
     generated = output[0][inputs["input_ids"].shape[-1]:]
-    return tokenizer.decode(generated, skip_special_tokens=True).strip()
+    text = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    if model_key in STRIP_THINKING:
+        import re
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    return text
 
 
 def main():

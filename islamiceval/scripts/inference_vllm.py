@@ -13,9 +13,18 @@ from vllm import LLM, SamplingParams
 
 NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
 
-# Models with reasoning/thinking mode — disable it for clean, comparable outputs.
-NO_THINKING = {"fanar-2-27b", "deepseek-r1-llama-8b", "deepseek-r1-qwen-32b",
-               "deepseek-r1-llama-70b"}
+THINKING_KWARGS = {
+    "fanar-2-27b":           {"no_thinking": True},
+    "qwen3-0.6b":            {"enable_thinking": False},
+    "qwen3-1.7b":            {"enable_thinking": False},
+    "qwen3-4b":              {"enable_thinking": False},
+    "qwen3-8b":              {"enable_thinking": False},
+    "qwen3-14b":             {"enable_thinking": False},
+    "qwen3-30b-a3b":         {"enable_thinking": False},
+    "qwen3-32b":             {"enable_thinking": False},
+}
+
+STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b"}
 
 # Gemma-3 is multimodal (vision+text). vLLM profiles the vision encoder at
 # startup even for text-only inference, which OOMs on small MIG slices.
@@ -131,7 +140,7 @@ def main():
             {"role": "user",   "content": item["prompt"]},
         ]
 
-    extra_template_kwargs = {"no_thinking": True} if args.model in NO_THINKING else {}
+    extra_template_kwargs = THINKING_KWARGS.get(args.model, {})
 
     conversations = []
     for item in prompts:
@@ -155,11 +164,17 @@ def main():
     print(f"Generating {len(valid_convs)} answers...")
     outputs = llm.generate(valid_convs, sampling)
 
+    import re
+    def clean(text: str) -> str:
+        if args.model in STRIP_THINKING:
+            text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        return text.strip()
+
     results = [
         {
             "id":     item["id"],
             "prompt": item["prompt"],
-            "answer": out.outputs[0].text.strip(),
+            "answer": clean(out.outputs[0].text),
             "model":  args.model,
         }
         for item, out in zip(valid_prompts, outputs)

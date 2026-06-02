@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Span Annotation Tool — IslamicEval 2026</title>
+<style>
+:root {
+  --bg: #f0f2f5;
+  --card: #ffffff;
+  --accent: #2563eb;
+  --correct: #16a34a;
+  --reject: #dc2626;
+  --border: #e5e7eb;
+  /* four span types */
+  --quran-bg: #fef08a;          --quran-border: #ca8a04;   --quran-badge: #fef9c3;  --quran-text: #854d0e;
+  --hmatn-bg: #ddd6fe;          --hmatn-border: #7c3aed;   --hmatn-badge: #ede9fe;  --hmatn-text: #6d28d9;
+  --hisnad-bg: #bae6fd;         --hisnad-border: #0284c7;  --hisnad-badge: #e0f2fe; --hisnad-text: #075985;
+  --csource-bg: #fed7aa;        --csource-border: #ea580c; --csource-badge: #ffedd5;--csource-text: #9a3412;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); font-family: 'Segoe UI', system-ui, sans-serif; color: #1f2937; direction: rtl; }
+
+/* Upload screen */
+#upload-screen {
+  max-width: 480px; margin: 80px auto;
+  background: var(--card); border-radius: 12px; padding: 36px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+#upload-screen h2 { font-size: 20px; margin-bottom: 6px; text-align: center; }
+#upload-screen p  { font-size: 13px; color: #6b7280; text-align: center; margin-bottom: 28px; }
+.file-group { margin-bottom: 16px; }
+.file-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+.file-group input  { width: 100%; padding: 8px 10px; border: 1px dashed var(--border); border-radius: 6px; font-size: 13px; cursor: pointer; direction: ltr; }
+.btn-load { width: 100%; padding: 11px; background: var(--accent); color: #fff; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; margin-top: 4px; }
+.btn-load:hover { background: #1d4ed8; }
+#load-error { color: var(--reject); font-size: 13px; margin-top: 10px; text-align: center; min-height: 18px; }
+
+/* App shell */
+#app { display: none; padding-bottom: 64px; }
+
+header {
+  background: var(--card); border-bottom: 1px solid var(--border);
+  padding: 12px 24px; display: flex; align-items: center; justify-content: space-between;
+  position: sticky; top: 0; z-index: 10;
+}
+header h1    { font-size: 15px; font-weight: 600; }
+.progress-wrap { display: flex; align-items: center; gap: 10px; }
+.progress-bar  { width: 180px; height: 5px; background: #e5e7eb; border-radius: 3px; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .3s; }
+#progress-label { font-size: 12px; color: #6b7280; }
+
+/* Layout */
+.layout {
+  display: grid; grid-template-columns: 1fr 360px;
+  gap: 16px; padding: 16px; max-width: 1400px; margin: 0 auto;
+}
+
+.card { background: var(--card); border-radius: 10px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 12px; }
+
+/* Meta bar */
+.meta-bar { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+.badge { padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600; }
+.badge-id    { background: #e0f2fe; color: #0369a1; }
+.badge-model { background: #f3f4f6; color: #374151; direction: ltr; }
+.badge-added { background: #dcfce7; color: #166534; }
+
+.section-label { font-size: 11px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 8px; }
+
+/* Prompt box */
+.prompt-box {
+  background: #f8fafc; border-right: 3px solid var(--accent);
+  padding: 12px 14px; border-radius: 0 6px 6px 0;
+  font-size: 14px; line-height: 1.9; margin-bottom: 16px; color: #374151;
+}
+
+/* Answer box */
+.answer-box {
+  font-size: 15px; line-height: 2.4;
+  background: #fafafa; border: 1px solid var(--border);
+  border-radius: 8px; padding: 16px; min-height: 100px; white-space: pre-wrap;
+}
+.span-quran    { background: var(--quran-bg);   border-bottom: 2px solid var(--quran-border);   border-radius: 3px; padding: 0 2px; }
+.span-hmatn    { background: var(--hmatn-bg);   border-bottom: 2px solid var(--hmatn-border);   border-radius: 3px; padding: 0 2px; }
+.span-hisnad   { background: var(--hisnad-bg);  border-bottom: 2px solid var(--hisnad-border);  border-radius: 3px; padding: 0 2px; }
+.span-csource  { background: var(--csource-bg); border-bottom: 2px solid var(--csource-border); border-radius: 3px; padding: 0 2px; }
+
+/* Legend */
+.legend { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: #6b7280; margin-bottom: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 4px; }
+.legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+
+/* Nav bar */
+.nav-row { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; }
+.btn { padding: 7px 16px; border-radius: 6px; border: 1px solid var(--border); background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; }
+.btn:hover { background: #f9fafb; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-correct { background: #dcfce7; color: var(--correct); border-color: #86efac; }
+.btn-correct:hover { background: #bbf7d0; }
+.btn-reject  { background: #fee2e2; color: var(--reject);  border-color: #fca5a5; }
+.btn-reject:hover  { background: #fecaca; }
+
+/* Type toggle (2x2) */
+.type-toggle { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.type-btn {
+  flex: 1 1 46%; padding: 7px 6px; border-radius: 6px; border: 1px solid var(--border);
+  cursor: pointer; font-size: 12.5px; font-weight: 600; text-align: center; color: #9ca3af; background: #fff;
+}
+.type-btn .k { font-size: 10px; opacity: .7; font-weight: 700; }
+.type-btn.on-quran   { background: var(--quran-badge);   color: var(--quran-text);   border-color: var(--quran-border); }
+.type-btn.on-hadith_matn  { background: var(--hmatn-badge);   color: var(--hmatn-text);   border-color: var(--hmatn-border); }
+.type-btn.on-hadith_isnad { background: var(--hisnad-badge);  color: var(--hisnad-text);  border-color: var(--hisnad-border); }
+.type-btn.on-claimed_source { background: var(--csource-badge); color: var(--csource-text); border-color: var(--csource-border); }
+
+.span-text-box {
+  background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px;
+  padding: 12px; font-size: 15px; line-height: 1.9; margin-bottom: 14px;
+}
+
+/* Boundary row */
+.boundary-row { display: flex; gap: 8px; margin-bottom: 14px; }
+.boundary-box {
+  flex: 1; background: #f8fafc; border: 1px solid var(--border);
+  border-radius: 6px; padding: 10px; text-align: center;
+}
+.boundary-box .blabel { font-size: 11px; color: #9ca3af; margin-bottom: 5px; }
+.boundary-box .bchars { font-size: 15px; font-weight: 600; letter-spacing: .03em; min-height: 26px; }
+.boundary-box.bstart { border-right: 3px solid var(--accent); }
+.boundary-box.bend   { border-left:  3px solid var(--accent); }
+
+/* Match indicator */
+.match-pill {
+  padding: 7px 12px; border-radius: 6px; font-size: 13px; font-weight: 600;
+  text-align: center; margin-bottom: 10px;
+}
+.match-ok   { background: #dcfce7; color: var(--correct); }
+.match-fail { background: #fee2e2; color: var(--reject); }
+.match-na   { background: #f3f4f6; color: #6b7280; }
+
+.pos-label { font-size: 12px; color: #9ca3af; direction: ltr; text-align: center; margin-bottom: 14px; }
+
+/* Correction / Add */
+.correction-area { border-top: 1px solid var(--border); padding-top: 14px; }
+.correction-area textarea, .add-area textarea {
+  width: 100%; border: 1px solid var(--border); border-radius: 6px;
+  padding: 10px; font-size: 14px; resize: vertical; min-height: 64px;
+  font-family: inherit; line-height: 1.8;
+}
+.correction-area textarea:focus, .add-area textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.btn-find {
+  width: 100%; margin-top: 8px; padding: 8px;
+  background: #eff6ff; color: var(--accent); border: 1px solid #bfdbfe;
+  border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.btn-find:hover { background: #dbeafe; }
+.btn-add {
+  width: 100%; margin-top: 8px; padding: 9px;
+  background: #dcfce7; color: var(--correct); border: 1px solid #86efac;
+  border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.btn-add:hover { background: #bbf7d0; }
+.find-result, .add-result {
+  margin-top: 8px; padding: 7px 10px; background: #f9fafb;
+  border-radius: 5px; font-size: 12px; direction: ltr; display: none;
+}
+.card-title { font-size: 13px; font-weight: 700; color: #374151; margin-bottom: 10px; }
+
+/* Save bar */
+.save-bar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--card); border-top: 1px solid var(--border);
+  padding: 12px 24px; display: flex; justify-content: space-between; align-items: center;
+}
+.save-stats { font-size: 13px; color: #6b7280; }
+.btn-save {
+  background: var(--accent); color: #fff; border: none; border-radius: 6px;
+  padding: 9px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.btn-save:hover { background: #1d4ed8; }
+.span-counter { font-size: 13px; color: #6b7280; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<!-- Upload screen -->
+<div id="upload-screen">
+  <h2>أداة التحقق من النطاقات</h2>
+  <p>Span Annotation Tool — IslamicEval 2026</p>
+
+  <div class="file-group">
+    <label>ملف الإجابات (answers JSON)</label>
+    <input type="file" id="f-answers" accept=".json">
+  </div>
+  <div class="file-group">
+    <label>ملف التحليل (annotations JSON)</label>
+    <input type="file" id="f-annotations" accept=".json">
+  </div>
+  <button class="btn-load" onclick="loadFiles()">تحميل ▶</button>
+  <div id="load-error"></div>
+</div>
+
+<!-- Main app -->
+<div id="app">
+  <header>
+    <h1>أداة التحقق من النطاقات — IslamicEval 2026</h1>
+    <div class="progress-wrap">
+      <span id="progress-label">0 / 0</span>
+      <div class="progress-bar"><div class="progress-fill" id="prog-fill" style="width:0%"></div></div>
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- Left: answer display -->
+    <div>
+      <div class="card">
+        <div class="meta-bar">
+          <span class="badge badge-id"   id="badge-id">ID: —</span>
+          <span class="badge badge-model" id="badge-model">—</span>
+          <span class="span-counter"     id="span-counter">نطاق — / —</span>
+        </div>
+
+        <div class="section-label">السؤال</div>
+        <div class="prompt-box" id="prompt-text" dir="rtl">—</div>
+
+        <div class="section-label">الإجابة <span style="font-weight:400;font-size:10px;color:#9ca3af;">(النطاق المحدد مظلل)</span></div>
+        <div class="legend">
+          <span><i style="background:var(--quran-bg);border:1px solid var(--quran-border)"></i> قرآن</span>
+          <span><i style="background:var(--hmatn-bg);border:1px solid var(--hmatn-border)"></i> متن حديث</span>
+          <span><i style="background:var(--hisnad-bg);border:1px solid var(--hisnad-border)"></i> سند حديث</span>
+          <span><i style="background:var(--csource-bg);border:1px solid var(--csource-border)"></i> المصدر المذكور</span>
+        </div>
+        <div class="answer-box" id="answer-box" dir="rtl">—</div>
+      </div>
+
+      <div class="nav-row" style="margin-top:12px;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn" id="btn-prev" onclick="go(-1)">→ السابق</button>
+          <button class="btn" id="btn-next" onclick="go(+1)">التالي ←</button>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-reject"  onclick="mark('reject')" >✗ رفض  (R)</button>
+          <button class="btn btn-correct" onclick="mark('correct')">✓ صحيح (O)</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: details panel -->
+    <div>
+      <!-- current span verification -->
+      <div class="card">
+        <div class="section-label">نوع النطاق</div>
+        <div class="type-toggle">
+          <div class="type-btn" id="tt-quran"          onclick="setType('quran')">قرآن <span class="k">(1/Q)</span></div>
+          <div class="type-btn" id="tt-hadith_matn"    onclick="setType('hadith_matn')">متن حديث <span class="k">(2/H)</span></div>
+          <div class="type-btn" id="tt-hadith_isnad"   onclick="setType('hadith_isnad')">سند حديث <span class="k">(3)</span></div>
+          <div class="type-btn" id="tt-claimed_source" onclick="setType('claimed_source')">المصدر المذكور <span class="k">(4)</span></div>
+        </div>
+
+        <div class="section-label">نص النطاق المحدد <span id="added-flag"></span></div>
+        <div class="span-text-box" id="span-text" dir="rtl">—</div>
+
+        <div class="section-label">حدود النطاق في الإجابة</div>
+        <div class="boundary-row">
+          <div class="boundary-box bstart">
+            <div class="blabel">أول ~3 أحرف</div>
+            <div class="bchars" id="b-first" dir="rtl">—</div>
+          </div>
+          <div class="boundary-box bend">
+            <div class="blabel">آخر ~3 أحرف</div>
+            <div class="bchars" id="b-last" dir="rtl">—</div>
+          </div>
+        </div>
+
+        <div class="match-pill match-na" id="match-pill">— لا توجد إحداثيات</div>
+        <div class="pos-label" id="pos-label">start: — | end: —</div>
+
+        <!-- Correction (fix wrong indices) -->
+        <div class="correction-area">
+          <div class="section-label">تصحيح موضع النطاق</div>
+          <p style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+            انسخ النص الصحيح من الإجابة وألصقه هنا — سيتم إيجاد موضعه:
+          </p>
+          <textarea id="corr-input" dir="rtl" placeholder="الصق النص الصحيح هنا..."></textarea>
+          <button class="btn-find" onclick="findAndUpdate()">🔍 بحث وتحديث الموضع</button>
+          <div class="find-result" id="find-result"></div>
+        </div>
+      </div>
+
+      <!-- Add a missed span -->
+      <div class="card add-area">
+        <div class="card-title">➕ إضافة نطاق مفقود</div>
+        <p style="font-size:12px;color:#6b7280;margin-bottom:8px;">
+          لمرجع لم يلتقطه Gemini: اختر النوع، ألصق النص من الإجابة الحالية، ثم أضِف:
+        </p>
+        <div class="type-toggle">
+          <div class="type-btn" id="at-quran"          onclick="setAddType('quran')">قرآن</div>
+          <div class="type-btn" id="at-hadith_matn"    onclick="setAddType('hadith_matn')">متن حديث</div>
+          <div class="type-btn" id="at-hadith_isnad"   onclick="setAddType('hadith_isnad')">سند حديث</div>
+          <div class="type-btn" id="at-claimed_source" onclick="setAddType('claimed_source')">المصدر المذكور</div>
+        </div>
+        <textarea id="add-input" dir="rtl" placeholder="الصق نص المرجع المفقود هنا..."></textarea>
+        <button class="btn-add" onclick="addSpan()">➕ إضافة نطاق جديد</button>
+        <div class="add-result" id="add-result"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="save-bar">
+    <div class="save-stats" id="save-stats">0 صحيح | 0 مرفوض | 0 معلق</div>
+    <button class="btn-save" onclick="exportResults()">💾 تصدير النتائج</button>
+  </div>
+</div>
+
+<script>
+// ─── Type system ─────────────────────────────────────────────────────────────
+const TYPES = {
+  quran:          { ar: 'قرآن',          cls: 'span-quran'  },
+  hadith_matn:    { ar: 'متن الحديث',     cls: 'span-hmatn'  },
+  hadith_isnad:   { ar: 'سند الحديث',     cls: 'span-hisnad' },
+  claimed_source: { ar: 'المصدر المذكور', cls: 'span-csource'},
+};
+const TYPE_ORDER = ['quran', 'hadith_matn', 'hadith_isnad', 'claimed_source'];
+const KEY_TO_TYPE = {
+  '1': 'quran', '2': 'hadith_matn', '3': 'hadith_isnad', '4': 'claimed_source',
+  'q': 'quran', 'Q': 'quran', 'h': 'hadith_matn', 'H': 'hadith_matn',   // letter aliases
+};
+
+function normType(t) {
+  if (t === 'q') return 'quran';
+  if (t === 'h') return 'hadith_matn';      // legacy Gemini hadith -> matn (reclassify in tool)
+  return TYPE_ORDER.includes(t) ? t : 'quran';
+}
+function spanClass(t) { return (TYPES[t] || TYPES.quran).cls; }
+function paintTypeButtons(prefix, activeType) {
+  TYPE_ORDER.forEach(t => {
+    const el = document.getElementById(prefix + t);
+    if (el) el.className = 'type-btn' + (t === activeType ? ' on-' + t : '');
+  });
+}
+
+// ─── State ───────────────────────────────────────────────────────────────────
+let answersMap = {};
+let spans = [];
+/*
+  span shape:
+  { prompt_id, span_idx, type, text,
+    start, end, corrected_start, corrected_end, corrected_text,
+    status: 'pending'|'correct'|'reject', added?: true }
+*/
+let cur = 0;
+let addType = 'quran';   // selected type for the "add" panel
+
+// ─── Load files ───────────────────────────────────────────────────────────────
+function loadFiles() {
+  const fa = document.getElementById('f-answers').files[0];
+  const fb = document.getElementById('f-annotations').files[0];
+  const errEl = document.getElementById('load-error');
+  errEl.textContent = '';
+  if (!fa || !fb) { errEl.textContent = 'الرجاء تحديد كلا الملفين'; return; }
+
+  let answers = null, annotations = null;
+  function tryInit() {
+    if (!answers || !annotations) return;
+    try { init(answers, annotations); }
+    catch(e) { errEl.textContent = 'خطأ في تهيئة البيانات: ' + e.message; }
+  }
+  readJSON(fa, d => { answers = d; tryInit(); }, e => { errEl.textContent = 'خطأ في ملف الإجابات: ' + e; });
+  readJSON(fb, d => { annotations = d; tryInit(); }, e => { errEl.textContent = 'خطأ في ملف التحليل: ' + e; });
+}
+
+function readJSON(file, onSuccess, onError) {
+  const r = new FileReader();
+  r.onload = e => { try { onSuccess(JSON.parse(e.target.result)); } catch(err) { onError(err.message); } };
+  r.onerror = () => onError('فشل القراءة');
+  r.readAsText(file);
+}
+
+function init(answers, annotations) {
+  answersMap = {};
+  (Array.isArray(answers) ? answers : [answers]).forEach(a => { answersMap[a.id] = a; });
+
+  spans = [];
+  const mk = (pid, sp, i) => ({
+    prompt_id: pid, span_idx: i,
+    type: normType(sp.type), text: sp.text || '',
+    start: sp.start, end: sp.end,
+    corrected_start: null, corrected_end: null, corrected_text: null,
+    status: sp.status || 'pending', added: !!sp.added,
+  });
+
+  // Format B (flat): {spans:[{id,type,text,start,end}]}   Format A (grouped): [{id, spans:[...]}]
+  const isFormatB = !Array.isArray(annotations) && Array.isArray(annotations.spans)
+                    && annotations.spans.length > 0 && 'id' in annotations.spans[0];
+  if (isFormatB) {
+    annotations.spans.forEach((sp, i) => spans.push(mk(sp.id || sp.prompt_id, sp, i)));
+  } else {
+    (Array.isArray(annotations) ? annotations : [annotations]).forEach(entry => {
+      const pid = entry.id || entry.prompt_id;
+      (entry.spans || []).forEach((sp, i) => spans.push(mk(pid, sp, i)));
+    });
+  }
+
+  if (!spans.length) { document.getElementById('load-error').textContent = 'لا توجد نطاقات'; return; }
+
+  cur = 0;
+  setAddType('quran');
+  document.getElementById('upload-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  render();
+}
+
+// ─── Render ──────────────────────────────────────────────────────────────────
+function render() {
+  const sp  = spans[cur];
+  const ans = answersMap[sp.prompt_id] || {};
+
+  document.getElementById('badge-id').textContent    = 'ID: ' + sp.prompt_id;
+  document.getElementById('badge-model').textContent = ans.model || '—';
+  document.getElementById('span-counter').textContent = `نطاق ${cur + 1} / ${spans.length}`;
+  document.getElementById('prompt-text').textContent = ans.prompt || '—';
+  document.getElementById('added-flag').innerHTML =
+    sp.added ? '<span class="badge badge-added">مُضاف يدوياً</span>' : '';
+
+  renderAnswer(ans.answer || '', sp);
+  document.getElementById('span-text').textContent = sp.text || '—';
+
+  const s = sp.corrected_start ?? sp.start;
+  const e = sp.corrected_end   ?? sp.end;
+  const ansText = ans.answer || '';
+  const highlighted = (s != null && e != null && e > s && e <= ansText.length)
+    ? ansText.slice(s, e) : '';
+
+  document.getElementById('b-first').textContent = highlighted ? highlighted.slice(0, 10)  : '—';
+  document.getElementById('b-last').textContent  = highlighted ? highlighted.slice(-10)     : '—';
+  document.getElementById('pos-label').textContent =
+    (s != null && e != null) ? `start: ${s} | end: ${e}` : 'start: — | end: —';
+
+  const pill = document.getElementById('match-pill');
+  if (!highlighted) {
+    pill.className = 'match-pill match-na';
+    pill.textContent = '— لا توجد إحداثيات صالحة';
+  } else {
+    const norm = t => removeDiacritics(t.trim().replace(/\s+/g, ' '));
+    const ok   = norm(highlighted) === norm(sp.text);
+    pill.className   = 'match-pill ' + (ok ? 'match-ok' : 'match-fail');
+    pill.textContent = ok ? '✓ النص مطابق للنطاق' : '✗ النص غير مطابق — يُنصح بالتصحيح';
+  }
+
+  paintTypeButtons('tt-', sp.type);
+
+  document.getElementById('btn-prev').disabled = cur === 0;
+  document.getElementById('btn-next').disabled = cur === spans.length - 1;
+
+  document.getElementById('corr-input').value = '';
+  document.getElementById('find-result').style.display = 'none';
+  updateStats();
+}
+
+function renderAnswer(ansText, sp) {
+  const s = sp.corrected_start ?? sp.start;
+  const e = sp.corrected_end   ?? sp.end;
+  const box = document.getElementById('answer-box');
+
+  if (s == null || e == null || e <= s || s < 0 || e > ansText.length) {
+    box.textContent = ansText;
+    return;
+  }
+  const mark = document.createElement('mark');
+  mark.className   = spanClass(sp.type);
+  mark.textContent = ansText.slice(s, e);
+  box.innerHTML = '';
+  box.appendChild(document.createTextNode(ansText.slice(0, s)));
+  box.appendChild(mark);
+  box.appendChild(document.createTextNode(ansText.slice(e)));
+}
+
+// ─── Navigation / marking / type ─────────────────────────────────────────────
+function go(delta) {
+  const next = cur + delta;
+  if (next >= 0 && next < spans.length) { cur = next; render(); }
+}
+function mark(status) {
+  spans[cur].status = status;
+  if (cur < spans.length - 1) cur++;
+  render();
+}
+function setType(t) {
+  spans[cur].type = normType(t);
+  paintTypeButtons('tt-', spans[cur].type);
+  renderAnswer(answersMap[spans[cur].prompt_id]?.answer || '', spans[cur]);
+}
+function setAddType(t) {
+  addType = normType(t);
+  paintTypeButtons('at-', addType);
+}
+
+// ─── Search helper (shared by correct + add) ─────────────────────────────────
+function removeDiacritics(t) { return t.replace(/[ً-ٰٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/g, ''); }
+
+function searchInAnswer(ansText, query) {
+  const isDiac = c => /[ً-ٰٟۖ-ۜ۟-۪ۤۧۨ-ۭ]/.test(c);
+
+  let start = ansText.indexOf(query);
+  if (start !== -1) return { start, end: start + query.length, method: 'مطابقة تامة' };
+
+  // NFD (canonical reorder of combining marks; Arabic length unchanged)
+  const idx = ansText.normalize('NFD').indexOf(query.normalize('NFD'));
+  if (idx !== -1) return { start: idx, end: idx + query.normalize('NFD').length, method: 'مطابقة Unicode NFD' };
+
+  // diacritic-stripped, mapped back to original indices
+  const na = removeDiacritics(ansText), nq = removeDiacritics(query);
+  const sIdx = na.indexOf(nq);
+  if (sIdx === -1) return null;
+
+  let stripped = 0, oStart = -1;
+  for (let i = 0; i < ansText.length; i++) {
+    if (stripped === sIdx) { oStart = i; break; }
+    if (!isDiac(ansText[i])) stripped++;
+  }
+  let cnt = 0, oEnd = -1;
+  for (let i = oStart; i < ansText.length; i++) {
+    if (!isDiac(ansText[i])) {
+      cnt++;
+      if (cnt === nq.length) {
+        let j = i + 1;
+        while (j < ansText.length && isDiac(ansText[j])) j++;
+        oEnd = j; break;
+      }
+    }
+  }
+  if (oEnd === -1) oEnd = ansText.length;
+  return { start: oStart, end: oEnd, method: 'مطابقة بدون تشكيل' };
+}
+
+// ─── Correction (fix wrong indices on current span) ──────────────────────────
+function findAndUpdate() {
+  const sp      = spans[cur];
+  const ansText = answersMap[sp.prompt_id]?.answer || '';
+  const query   = document.getElementById('corr-input').value.trim();
+  const resEl   = document.getElementById('find-result');
+  resEl.style.display = 'block';
+  if (!query) { resEl.textContent = 'الرجاء إدخال نص للبحث'; resEl.style.color = '#6b7280'; return; }
+
+  const r = searchInAnswer(ansText, query);
+  if (!r) { resEl.textContent = '✗ لم يُعثر على النص في الإجابة'; resEl.style.color = '#dc2626'; return; }
+
+  sp.corrected_start = r.start;
+  sp.corrected_end   = r.end;
+  sp.corrected_text  = ansText.slice(r.start, r.end);
+  resEl.textContent = `✓ ${r.method} — start: ${r.start} | end: ${r.end}`;
+  resEl.style.color = '#16a34a';
+  render();
+}
+
+// ─── Add a missed span ───────────────────────────────────────────────────────
+function addSpan() {
+  const sp      = spans[cur];
+  const ansText = answersMap[sp.prompt_id]?.answer || '';
+  const query   = document.getElementById('add-input').value.trim();
+  const resEl   = document.getElementById('add-result');
+  resEl.style.display = 'block';
+  if (!query) { resEl.textContent = 'الرجاء إدخال نص المرجع'; resEl.style.color = '#6b7280'; return; }
+
+  const r = searchInAnswer(ansText, query);
+  if (!r) { resEl.textContent = '✗ لم يُعثر على النص في الإجابة الحالية'; resEl.style.color = '#dc2626'; return; }
+
+  const newSpan = {
+    prompt_id: sp.prompt_id, span_idx: -1,
+    type: addType, text: ansText.slice(r.start, r.end),
+    start: r.start, end: r.end,
+    corrected_start: null, corrected_end: null, corrected_text: null,
+    status: 'correct', added: true,
+  };
+  spans.splice(cur + 1, 0, newSpan);   // insert next to current (same prompt)
+  document.getElementById('add-input').value = '';
+  resEl.textContent = `✓ أُضيف (${TYPES[addType].ar}) — start: ${r.start} | end: ${r.end}`;
+  resEl.style.color = '#16a34a';
+  cur++;                                // jump to the new span
+  render();
+}
+
+// ─── Stats ───────────────────────────────────────────────────────────────────
+function updateStats() {
+  const done    = spans.filter(s => s.status !== 'pending').length;
+  const correct = spans.filter(s => s.status === 'correct').length;
+  const reject  = spans.filter(s => s.status === 'reject').length;
+  const pending = spans.filter(s => s.status === 'pending').length;
+  document.getElementById('prog-fill').style.width = `${(done / spans.length) * 100}%`;
+  document.getElementById('progress-label').textContent = `${done} / ${spans.length}`;
+  document.getElementById('save-stats').textContent = `${correct} صحيح | ${reject} مرفوض | ${pending} معلق`;
+}
+
+// ─── Export ──────────────────────────────────────────────────────────────────
+function exportResults() {
+  const byPrompt = {};
+  spans.forEach(sp => {
+    (byPrompt[sp.prompt_id] ||= []).push({
+      type:   sp.type,
+      text:   sp.corrected_text  ?? sp.text,
+      start:  sp.corrected_start ?? sp.start,
+      end:    sp.corrected_end   ?? sp.end,
+      status: sp.status,
+      ...(sp.added ? { added: true } : {}),
+    });
+  });
+  const output = Object.entries(byPrompt).map(([id, spns]) => ({ id, spans: spns }));
+  const blob = new Blob([JSON.stringify(output, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `annotations_verified_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+
+// ─── Keyboard ────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', ev => {
+  if (ev.target.tagName === 'TEXTAREA' || ev.target.tagName === 'INPUT') return;
+  if (ev.key === 'ArrowLeft'  || ev.key === 'ArrowDown')  go(+1);
+  if (ev.key === 'ArrowRight' || ev.key === 'ArrowUp')    go(-1);
+  if (ev.key === 'o' || ev.key === 'O') mark('correct');
+  if (ev.key === 'r' || ev.key === 'R') mark('reject');
+  if (KEY_TO_TYPE[ev.key]) setType(KEY_TO_TYPE[ev.key]);
+});
+</script>
+</body>
+</html>
