@@ -1,0 +1,17 @@
+# IslamicEval 2026 — dependencies
+# Install on the GPU cluster with:  pip install -r requirements.txt
+# (Install vllm first if you hit a torch/CUDA conflict: it pins a compatible torch.)
+
+# ── Stage 2: local inference (GPU) ─────────────────────────────────────────────
+vllm                 # high-throughput inference; pulls a compatible torch + transformers
+transformers         # HF inference path (also used by resolve_sampling)
+accelerate           # device_map="auto" in the HF script
+bitsandbytes         # 4-bit NF4 quantization in the HF script
+tqdm
+huggingface_hub      # model downloads + login for gated repos (llama, gemma)
+
+# ── Stage 3: frontier-LLM annotation (API; can run anywhere) ───────────────────
+openai               # OpenAI + Together + OpenRouter (OpenAI-compatible)
+anthropic
+google-genai         # import: `from google import genai`
+python-dotenv

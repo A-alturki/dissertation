@@ -40,6 +40,32 @@ SYSTEM_PROMPT = (
     "عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ) إن أمكن."
 )
 
+# Sampling fallbacks for models whose generation_config doesn't enable sampling.
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TOP_P       = 0.9
+
+
+def resolve_sampling(model_id: str, cli_temperature, cli_top_p):
+    """Return (temperature, top_p) to sample with.
+
+    We always sample. If the model's own generation_config enables sampling
+    (do_sample=True), use its temperature/top_p; otherwise fall back to the
+    DEFAULT_* values. A CLI flag, if given, overrides either source.
+    """
+    temperature, top_p = cli_temperature, cli_top_p
+    if temperature is None or top_p is None:
+        try:
+            from transformers import GenerationConfig
+            gc = GenerationConfig.from_pretrained(model_id)
+            samples = bool(getattr(gc, "do_sample", False))
+        except Exception:
+            gc, samples = None, False
+        if temperature is None:
+            temperature = gc.temperature if (samples and gc.temperature) else DEFAULT_TEMPERATURE
+        if top_p is None:
+            top_p = gc.top_p if (samples and gc.top_p) else DEFAULT_TOP_P
+    return temperature, top_p
+
 MODELS = {
     # ==================== Arabic-centric ====================
     "allam-7b":              "ALLaM-AI/ALLaM-7B-Instruct-preview",
@@ -78,7 +104,6 @@ MODELS = {
     # ==================== Other =============================
     "phi-4-14b":             "microsoft/phi-4",
     "glm-4-9b":              "THUDM/glm-4-9b-chat",
-    "command-r-7b":          "CohereForAI/c4ai-command-r7b-12-2024",
 
     # ==========================================================
     # HEAVY COMPUTE — need A100 80GB+ or multi-GPU
@@ -99,13 +124,49 @@ MODELS = {
     "deepseek-v3":           "deepseek-ai/DeepSeek-V3-0324",             # 685B MoE, 37B active
 }
 
+islamic_eval_models = ["allam-7b", "jais-13b", "acegpt-8b", "silma-9b", "fanar-1-9b", "qwen3-8b", "gemma-3-12b", "mistral-7b", "deepseek-r1-llama-8b", "llama-3.1-8b"]
+
+# Named groups you can pass to --model to run several models back-to-back.
+MODEL_GROUPS = {
+    "islamic-eval": islamic_eval_models,
+    "all":          list(MODELS.keys()),
+}
+
+
+def run_group(args, model_names):
+    """Run several models sequentially, each in its own fresh subprocess so every
+    model gets a clean GPU (vLLM doesn't reliably free VRAM within one process)."""
+    import subprocess, sys
+    print(f"Running {len(model_names)} models: {model_names}")
+    failed = []
+    for i, m in enumerate(model_names, 1):
+        cmd = [sys.executable, os.path.abspath(__file__),
+               "--model", m,
+               "--input", args.input,
+               "--output-dir", args.output_dir,
+               "--max-tokens", str(args.max_tokens),
+               "--tensor-parallel", str(args.tensor_parallel)]
+        if args.temperature is not None: cmd += ["--temperature", str(args.temperature)]
+        if args.top_p       is not None: cmd += ["--top-p",       str(args.top_p)]
+        print(f"\n{'='*60}\n[{i}/{len(model_names)}] {m}\n{'='*60}")
+        if subprocess.run(cmd).returncode != 0:
+            print(f"[WARN] {m} failed — continuing with the rest.")
+            failed.append(m)
+    print(f"\nDone. {len(model_names) - len(failed)}/{len(model_names)} succeeded."
+          + (f"  Failed: {failed}" if failed else ""))
+
 
 def main():
     parser = argparse.ArgumentParser(description="Generate answers with vLLM (Stage 2)")
-    parser.add_argument("--model",           required=True, choices=list(MODELS.keys()))
+    parser.add_argument("--model",           required=True,
+                        help="a model key, or a group: " + " | ".join(MODEL_GROUPS))
     parser.add_argument("--input",           default="../data/classified/rag_questions.json")
     parser.add_argument("--output-dir",      default="../outputs/answers/")
     parser.add_argument("--max-tokens",      type=int, default=512)
+    parser.add_argument("--temperature",     type=float, default=None,
+                        help="Override sampling temperature (default: the model's own; pass 0 for greedy)")
+    parser.add_argument("--top-p",           type=float, default=None,
+                        help="Override nucleus sampling top-p (default: the model's own)")
     parser.add_argument("--tensor-parallel", type=int, default=1,
                         help="Number of GPUs for tensor parallelism (for 70B+ models)")
     args = parser.parse_args()
@@ -115,6 +176,9 @@ def main():
 
     model_id = MODELS[args.model]
     print(f"Loading {args.model} with vLLM ({model_id})  tp={args.tensor_parallel}")
+    temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
+    print(f"Sampling on — temperature={temperature}, top_p={top_p}")
+
     llm_kwargs = dict(
         model=model_id,
         tensor_parallel_size=args.tensor_parallel,
@@ -128,9 +192,9 @@ def main():
 
     llm = LLM(**llm_kwargs)
     tokenizer = llm.get_tokenizer()
-    
-    # We use deterministic decoding for evaluation here but we can change it later.
-    sampling  = SamplingParams(temperature=0, max_tokens=args.max_tokens)
+
+    sampling = SamplingParams(temperature=temperature, top_p=top_p,
+                              max_tokens=args.max_tokens)
 
     def build_messages(item):
         if args.model in NO_SYSTEM_ROLE:

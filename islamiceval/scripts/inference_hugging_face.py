@@ -40,6 +40,32 @@ SYSTEM_PROMPT = (
     "عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ) إن أمكن."
 )
 
+# Sampling fallbacks for models whose generation_config doesn't enable sampling.
+DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TOP_P       = 0.9
+
+
+def resolve_sampling(model_id: str, cli_temperature, cli_top_p):
+    """Return (temperature, top_p) to sample with.
+
+    We always sample. If the model's own generation_config enables sampling
+    (do_sample=True), use its temperature/top_p; otherwise fall back to the
+    DEFAULT_* values. A CLI flag, if given, overrides either source.
+    """
+    temperature, top_p = cli_temperature, cli_top_p
+    if temperature is None or top_p is None:
+        try:
+            from transformers import GenerationConfig
+            gc = GenerationConfig.from_pretrained(model_id)
+            samples = bool(getattr(gc, "do_sample", False))
+        except Exception:
+            gc, samples = None, False
+        if temperature is None:
+            temperature = gc.temperature if (samples and gc.temperature) else DEFAULT_TEMPERATURE
+        if top_p is None:
+            top_p = gc.top_p if (samples and gc.top_p) else DEFAULT_TOP_P
+    return temperature, top_p
+
 # used same models as islamiceval + mistral/acegpt/silma 
 MODELS = {
     # ==================== Arabic-centric ====================
@@ -130,7 +156,8 @@ def build_messages(prompt: str, model_key: str) -> list:
     ]
 
 
-def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_tokens: int = 512) -> str:
+def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_tokens: int = 512,
+                    temperature: float = None, top_p: float = None) -> str:
     messages = build_messages(prompt, model_key)
     extra = THINKING_KWARGS.get(model_key, {})
     inputs = tokenizer.apply_chat_template(
@@ -138,13 +165,16 @@ def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_token
         return_tensors="pt", return_dict=True, **extra
     ).to(model.device)
 
+    # Sampling on (temperature/top_p resolved per-model in main). temperature=0
+    # falls back to greedy.
+    do_sample = temperature > 0
     with torch.no_grad():
         output = model.generate(
             **inputs,
             max_new_tokens=max_new_tokens,
-            do_sample=False,
-            temperature=None,
-            top_p=None,
+            do_sample=do_sample,
+            temperature=temperature if do_sample else None,
+            top_p=top_p if do_sample else None,
         )
     generated = output[0][inputs["input_ids"].shape[-1]:]
     text = tokenizer.decode(generated, skip_special_tokens=True).strip()
@@ -160,6 +190,10 @@ def main():
     parser.add_argument("--input",       default="../data/classified/rag_questions.json")
     parser.add_argument("--output-dir",  default="../outputs/answers/")
     parser.add_argument("--max-tokens",  type=int, default=512)
+    parser.add_argument("--temperature", type=float, default=None,
+                        help="Override sampling temperature (default: the model's own; pass 0 for greedy)")
+    parser.add_argument("--top-p",       type=float, default=None,
+                        help="Override nucleus sampling top-p (default: the model's own)")
     parser.add_argument("--no-quantize", action="store_true", help="Disable 4-bit quantization (for A6000)")
     args = parser.parse_args()
 
@@ -170,6 +204,9 @@ def main():
     print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}")
     tokenizer, model = load_model(model_id, quantize=not args.no_quantize)
     print("Model loaded.")
+
+    temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
+    print(f"Sampling on — temperature={temperature}, top_p={top_p}")
 
     os.makedirs(args.output_dir, exist_ok=True)
     out_path = os.path.join(args.output_dir, f"{args.model}.json")
@@ -187,7 +224,8 @@ def main():
         if item["id"] in done_ids:
             continue
         try:
-            answer = generate_answer(item["prompt"], tokenizer, model, args.model, args.max_tokens)
+            answer = generate_answer(item["prompt"], tokenizer, model, args.model,
+                                     args.max_tokens, temperature, top_p)
         except Exception as e:
             print(f"\nError on id={item['id']}: {e}")
             answer = f"ERROR: {e}"
