@@ -34,9 +34,17 @@ LLAMA3_PROMPT_TEMPLATE = (
     "{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
 )
 MANUAL_TEMPLATES = {
-    "jais-13b":  JAIS_PROMPT_TEMPLATE,
-    "jais-70b":  JAIS_PROMPT_TEMPLATE,
-    "acegpt-8b": LLAMA3_PROMPT_TEMPLATE,
+    "jais-13b":             JAIS_PROMPT_TEMPLATE,
+    "jais-70b":             JAIS_PROMPT_TEMPLATE,
+    "acegpt-8b":            LLAMA3_PROMPT_TEMPLATE,
+    "deepseek-r1-llama-8b": LLAMA3_PROMPT_TEMPLATE,
+}
+
+# Some checkpoints ship a tokenizer that won't tokenize Arabic under transformers
+# v5 (encodes to 0 tokens). deepseek-r1-distill-llama-8b is Llama-3.1-8B based and
+# reuses Llama-3's vocab + EOS (128001), so use Llama-3.1's known-good tokenizer.
+TOKENIZER_OVERRIDE = {
+    "deepseek-r1-llama-8b": "meta-llama/Llama-3.1-8B-Instruct",
 }
 
 THINKING_KWARGS = {
@@ -254,6 +262,9 @@ def main():
     )
     if args.model in MULTIMODAL_MODELS:
         llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
+    if args.model in TOKENIZER_OVERRIDE:
+        llm_kwargs["tokenizer"] = TOKENIZER_OVERRIDE[args.model]
+        print(f"Tokenizer override -> {llm_kwargs['tokenizer']}")
 
     llm = LLM(**llm_kwargs)
     tokenizer = llm.get_tokenizer()
