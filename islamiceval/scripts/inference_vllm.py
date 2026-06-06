@@ -67,6 +67,18 @@ def resolve_sampling(model_id: str, cli_temperature, cli_top_p):
     return temperature, top_p
 
 
+def resolve_max_model_len(model_id, cap=4096):
+    """Cap context at `cap`, but never exceed what the model actually supports
+    (e.g. jais-13b is 2048). vLLM errors if max_model_len > the model's limit."""
+    try:
+        from transformers import AutoConfig
+        m = getattr(AutoConfig.from_pretrained(model_id, trust_remote_code=True),
+                    "max_position_embeddings", None)
+        return min(cap, m) if m else cap
+    except Exception:
+        return cap
+
+
 def load_prompts(path):
     """Load prompts as a list of {'id', 'prompt'}.
     .xlsx -> reads the 'qid' and 'prompt' columns; .json -> list of {'id','prompt'}.
@@ -206,7 +218,7 @@ def main():
         tensor_parallel_size=args.tensor_parallel,
         trust_remote_code=True,
         dtype="auto",
-        max_model_len=4096,
+        max_model_len=resolve_max_model_len(model_id),
         gpu_memory_utilization=0.70,
     )
     if args.model in MULTIMODAL_MODELS:
