@@ -223,12 +223,13 @@ def main():
     temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
     print(f"Sampling on — temperature={temperature}, top_p={top_p}")
 
+    max_len = resolve_max_model_len(model_id)
     llm_kwargs = dict(
         model=model_id,
         tensor_parallel_size=args.tensor_parallel,
         trust_remote_code=True,
         dtype="auto",
-        max_model_len=resolve_max_model_len(model_id),
+        max_model_len=max_len,
         gpu_memory_utilization=0.70,
     )
     if args.model in MULTIMODAL_MODELS:
@@ -237,8 +238,14 @@ def main():
     llm = LLM(**llm_kwargs)
     tokenizer = llm.get_tokenizer()
 
+    # Left-truncate any prompt that would overflow the context, leaving room for
+    # max_tokens of output (prompt + output must fit in max_len). Only ever bites
+    # over-long prompts — e.g. jais-13b's 2048 ctx. Keeps the tail (the assistant
+    # cue / question end), drops the head.
+    truncate_to = max(1, max_len - args.max_tokens)
     sampling = SamplingParams(temperature=temperature, top_p=top_p,
-                              max_tokens=args.max_tokens)
+                              max_tokens=args.max_tokens,
+                              truncate_prompt_tokens=truncate_to)
 
     def build_messages(item):
         if args.model in NO_SYSTEM_ROLE:

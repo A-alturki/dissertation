@@ -2,9 +2,8 @@
 data/raw/*
 data/data_experiments/*
 
-# Model outputs
-outputs/answers/
-outputs/annotations/
+# Model outputs — answers + annotations are tracked (text JSON, synced via git).
+# analysis/ stays ignored (plots/large derived artifacts).
 outputs/analysis/
 
 # Logs

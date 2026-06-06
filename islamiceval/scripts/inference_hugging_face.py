@@ -184,10 +184,28 @@ def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_token
     return text
 
 
+def load_prompts(path):
+    """Load prompts as a list of {'id', 'prompt'}.
+    .xlsx -> reads the 'qid' and 'prompt' columns; .json -> list of {'id','prompt'}.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".xlsx":
+        from openpyxl import load_workbook
+        rows = load_workbook(path, read_only=True, data_only=True).active.iter_rows(values_only=True)
+        header = list(next(rows))
+        qi, pi = header.index("qid"), header.index("prompt")
+        return [{"id": r[qi], "prompt": r[pi]} for r in rows if r[pi]]
+    if ext == ".json":
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    raise ValueError(f"Unsupported input '{ext}' (use .xlsx or .json)")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Generate answers with LLMs (Stage 2)")
     parser.add_argument("--model",       required=True, choices=list(MODELS.keys()))
-    parser.add_argument("--input",       default="../data/classified/rag_questions.json")
+    parser.add_argument("--input",       default="../data/classified/rag_questions.json",
+                        help="prompts file: .xlsx (qid+prompt) or .json")
     parser.add_argument("--output-dir",  default="../outputs/answers/")
     parser.add_argument("--max-tokens",  type=int, default=512)
     parser.add_argument("--temperature", type=float, default=None,
@@ -197,8 +215,8 @@ def main():
     parser.add_argument("--no-quantize", action="store_true", help="Disable 4-bit quantization (for A6000)")
     args = parser.parse_args()
 
-    with open(args.input, encoding="utf-8") as f:
-        prompts = json.load(f)
+    prompts = load_prompts(args.input)
+    print(f"Loaded {len(prompts)} prompts from {args.input}")
 
     model_id = MODELS[args.model]
     print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}")
