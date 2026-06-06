@@ -66,6 +66,24 @@ def resolve_sampling(model_id: str, cli_temperature, cli_top_p):
             top_p = gc.top_p if (samples and gc.top_p) else DEFAULT_TOP_P
     return temperature, top_p
 
+
+def load_prompts(path):
+    """Load prompts as a list of {'id', 'prompt'}.
+    .xlsx -> reads the 'qid' and 'prompt' columns; .json -> list of {'id','prompt'}.
+    """
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".xlsx":
+        from openpyxl import load_workbook
+        rows = load_workbook(path, read_only=True, data_only=True).active.iter_rows(values_only=True)
+        header = list(next(rows))
+        qi, pi = header.index("qid"), header.index("prompt")
+        return [{"id": r[qi], "prompt": r[pi]} for r in rows if r[pi]]
+    if ext == ".json":
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    raise ValueError(f"Unsupported input '{ext}' (use .xlsx or .json)")
+
+
 MODELS = {
     # ==================== Arabic-centric ====================
     "allam-7b":              "ALLaM-AI/ALLaM-7B-Instruct-preview",
@@ -145,6 +163,7 @@ def run_group(args, model_names):
                "--input", args.input,
                "--output-dir", args.output_dir,
                "--max-tokens", str(args.max_tokens),
+               "--batch-size", str(args.batch_size),
                "--tensor-parallel", str(args.tensor_parallel)]
         if args.temperature is not None: cmd += ["--temperature", str(args.temperature)]
         if args.top_p       is not None: cmd += ["--top-p",       str(args.top_p)]
@@ -160,9 +179,12 @@ def main():
     parser = argparse.ArgumentParser(description="Generate answers with vLLM (Stage 2)")
     parser.add_argument("--model",           required=True,
                         help="a model key, or a group: " + " | ".join(MODEL_GROUPS))
-    parser.add_argument("--input",           default="../data/classified/rag_questions.json")
+    parser.add_argument("--input",           default="../data/classified/rag_questions.json",
+                        help="prompts file: .xlsx (qid+prompt) or .json")
     parser.add_argument("--output-dir",      default="../outputs/answers/")
     parser.add_argument("--max-tokens",      type=int, default=512)
+    parser.add_argument("--batch-size",      type=int, default=128,
+                        help="Checkpoint interval: generate and save this many prompts at a time")
     parser.add_argument("--temperature",     type=float, default=None,
                         help="Override sampling temperature (default: the model's own; pass 0 for greedy)")
     parser.add_argument("--top-p",           type=float, default=None,
@@ -171,8 +193,8 @@ def main():
                         help="Number of GPUs for tensor parallelism (for 70B+ models)")
     args = parser.parse_args()
 
-    with open(args.input, encoding="utf-8") as f:
-        prompts = json.load(f)
+    prompts = load_prompts(args.input)
+    print(f"Loaded {len(prompts)} prompts from {args.input}")
 
     model_id = MODELS[args.model]
     print(f"Loading {args.model} with vLLM ({model_id})  tp={args.tensor_parallel}")
@@ -185,7 +207,7 @@ def main():
         trust_remote_code=True,
         dtype="auto",
         max_model_len=4096,
-        gpu_memory_utilization=0.90,
+        gpu_memory_utilization=0.70,
     )
     if args.model in MULTIMODAL_MODELS:
         llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
@@ -225,29 +247,53 @@ def main():
     if skipped:
         print(f"Warning: {skipped} prompts skipped due to template errors.")
 
-    print(f"Generating {len(valid_convs)} answers...")
-    outputs = llm.generate(valid_convs, sampling)
-
     import re
     def clean(text: str) -> str:
         if args.model in STRIP_THINKING:
             text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         return text.strip()
 
-    results = [
-        {
-            "id":     item["id"],
-            "prompt": item["prompt"],
-            "answer": clean(out.outputs[0].text),
-            "model":  args.model,
-        }
-        for item, out in zip(valid_prompts, outputs)
-    ]
-
     os.makedirs(args.output_dir, exist_ok=True)
     out_path = os.path.join(args.output_dir, f"{args.model}.json")
-    with open(out_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, ensure_ascii=False, indent=2)
+
+    def save(results):
+        # atomic: write to a temp file then replace, so a crash mid-write
+        # can't corrupt the checkpoint.
+        tmp = out_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(results, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, out_path)
+
+    # Resume: keep answers already saved, regenerate only the missing ids.
+    results = []
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            results = json.load(f)
+        done = {r["id"] for r in results}
+        keep = [(c, p) for c, p in zip(valid_convs, valid_prompts) if p["id"] not in done]
+        valid_convs  = [c for c, _ in keep]
+        valid_prompts = [p for _, p in keep]
+        print(f"Resuming: {len(done)} already done, {len(valid_convs)} remaining.")
+
+    total = len(valid_convs)
+    print(f"Generating {total} answers in batches of {args.batch_size}...")
+    for start in range(0, total, args.batch_size):
+        convs_b   = valid_convs[start:start + args.batch_size]
+        prompts_b = valid_prompts[start:start + args.batch_size]
+        outputs = llm.generate(convs_b, sampling)
+        results.extend(
+            {
+                "id":     item["id"],
+                "prompt": item["prompt"],
+                "answer": clean(out.outputs[0].text),
+                "model":  args.model,
+            }
+            for item, out in zip(prompts_b, outputs)
+        )
+        save(results)
+        print(f"  checkpoint: {min(start + args.batch_size, total)}/{total} done "
+              f"-> {out_path} ({len(results)} total)")
+
     print(f"Saved {len(results)} answers -> {out_path}")
 
 

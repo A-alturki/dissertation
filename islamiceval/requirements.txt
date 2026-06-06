@@ -9,6 +9,7 @@ accelerate           # device_map="auto" in the HF script
 bitsandbytes         # 4-bit NF4 quantization in the HF script
 tqdm
 huggingface_hub      # model downloads + login for gated repos (llama, gemma)
+openpyxl             # read .xlsx prompt inputs (inference scripts' load_prompts); TSV/CSV use stdlib csv
 
 # ── Stage 3: frontier-LLM annotation (API; can run anywhere) ───────────────────
 openai               # OpenAI + Together + OpenRouter (OpenAI-compatible)
