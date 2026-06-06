@@ -238,14 +238,13 @@ def main():
     llm = LLM(**llm_kwargs)
     tokenizer = llm.get_tokenizer()
 
-    # Left-truncate any prompt that would overflow the context, leaving room for
-    # max_tokens of output (prompt + output must fit in max_len). Only ever bites
-    # over-long prompts — e.g. jais-13b's 2048 ctx. Keeps the tail (the assistant
-    # cue / question end), drops the head.
-    truncate_to = max(1, max_len - args.max_tokens)
     sampling = SamplingParams(temperature=temperature, top_p=top_p,
-                              max_tokens=args.max_tokens,
-                              truncate_prompt_tokens=truncate_to)
+                              max_tokens=args.max_tokens)
+
+    # Prompt + output must fit in max_len; leave room for max_tokens of output.
+    # Over-long prompts (e.g. jais-13b's 2048 ctx) are left-truncated below,
+    # keeping the tail (assistant cue / question end) and dropping the head.
+    truncate_to = max(1, max_len - args.max_tokens)
 
     def build_messages(item):
         if args.model in NO_SYSTEM_ROLE:
@@ -258,6 +257,7 @@ def main():
     extra_template_kwargs = THINKING_KWARGS.get(args.model, {})
 
     conversations = []
+    n_truncated = 0
     for item in prompts:
         try:
             if args.model in JAIS_MODELS:
@@ -267,10 +267,18 @@ def main():
                     build_messages(item), tokenize=False, add_generation_prompt=True,
                     **extra_template_kwargs
                 )
+            # Enforce the context budget: left-truncate over-long prompts (keep the
+            # tail/assistant cue) so prompt + max_tokens fits in max_len.
+            ids = tokenizer(text, add_special_tokens=False).input_ids
+            if len(ids) > truncate_to:
+                text = tokenizer.decode(ids[-truncate_to:])
+                n_truncated += 1
         except Exception as e:
             print(f"Template error on id={item['id']}: {e} — skipping")
             text = None
         conversations.append(text)
+    if n_truncated:
+        print(f"Left-truncated {n_truncated} over-long prompt(s) to {truncate_to} tokens.")
 
     valid_indices = [i for i, c in enumerate(conversations) if c is not None]
     valid_convs   = [conversations[i] for i in valid_indices]
