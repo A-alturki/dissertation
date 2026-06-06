@@ -10,6 +10,7 @@ Usage:
 
 import os, json, argparse
 from vllm import LLM, SamplingParams
+from vllm.v1.attention.backends.registry import AttentionBackendEnum
 
 NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
 
@@ -231,6 +232,10 @@ def main():
         dtype="auto",
         max_model_len=max_len,
         gpu_memory_utilization=0.70,
+        # Turing (RTX 8000, sm_75): force Triton attention so vLLM never selects
+        # FlashInfer, which we can't use here (uninstalled; its kernels can't JIT on
+        # this box). FLASH_ATTN needs sm_80+; XFORMERS doesn't exist in vLLM V1.
+        attention_backend=AttentionBackendEnum.TRITON_ATTN,
     )
     if args.model in MULTIMODAL_MODELS:
         llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
