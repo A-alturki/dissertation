@@ -137,6 +137,10 @@ def load_model(model_id: str, quantize: bool = True):
             bnb_4bit_quant_type="nf4",
         )
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+    # Batched decoder generation needs LEFT padding and a pad token.
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
     model = AutoModelForCausalLM.from_pretrained(
         model_id,
         quantization_config=bnb_config,
@@ -156,18 +160,20 @@ def build_messages(prompt: str, model_key: str) -> list:
     ]
 
 
-def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_tokens: int = 512,
-                    temperature: float = None, top_p: float = None) -> str:
-    messages = build_messages(prompt, model_key)
+def generate_batch(prompts, tokenizer, model, model_key: str, max_new_tokens: int = 512,
+                   temperature: float = None, top_p: float = None) -> list:
+    """Generate answers for a batch of prompts in one model.generate() call."""
     extra = THINKING_KWARGS.get(model_key, {})
-    inputs = tokenizer.apply_chat_template(
-        messages, tokenize=True, add_generation_prompt=True,
-        return_tensors="pt", return_dict=True, **extra
-    ).to(model.device)
+    texts = [
+        tokenizer.apply_chat_template(build_messages(p, model_key), tokenize=False,
+                                      add_generation_prompt=True, **extra)
+        for p in prompts
+    ]
+    # Template strings already include special tokens -> add_special_tokens=False.
+    inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True,
+                       max_length=4096, add_special_tokens=False).to(model.device)
 
-    # Sampling on (temperature/top_p resolved per-model in main). temperature=0
-    # falls back to greedy.
-    do_sample = temperature > 0
+    do_sample = temperature > 0     # temperature=0 -> greedy
     with torch.no_grad():
         output = model.generate(
             **inputs,
@@ -175,13 +181,16 @@ def generate_answer(prompt: str, tokenizer, model, model_key: str, max_new_token
             do_sample=do_sample,
             temperature=temperature if do_sample else None,
             top_p=top_p if do_sample else None,
+            pad_token_id=tokenizer.pad_token_id,
         )
-    generated = output[0][inputs["input_ids"].shape[-1]:]
-    text = tokenizer.decode(generated, skip_special_tokens=True).strip()
+    gen = output[:, inputs["input_ids"].shape[1]:]   # left-padded -> same input width for all
+    answers = tokenizer.batch_decode(gen, skip_special_tokens=True)
     if model_key in STRIP_THINKING:
         import re
-        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    return text
+        answers = [re.sub(r"<think>.*?</think>", "", a, flags=re.DOTALL).strip() for a in answers]
+    else:
+        answers = [a.strip() for a in answers]
+    return answers
 
 
 def load_prompts(path):
@@ -208,6 +217,8 @@ def main():
                         help="prompts file: .xlsx (qid+prompt) or .json")
     parser.add_argument("--output-dir",  default="../outputs/answers/")
     parser.add_argument("--max-tokens",  type=int, default=512)
+    parser.add_argument("--batch-size",  type=int, default=16,
+                        help="Prompts per generate() call (raise if GPU memory allows)")
     parser.add_argument("--temperature", type=float, default=None,
                         help="Override sampling temperature (default: the model's own; pass 0 for greedy)")
     parser.add_argument("--top-p",       type=float, default=None,
@@ -238,24 +249,31 @@ def main():
         done_ids = {r["id"] for r in results}
         print(f"Resuming — {len(done_ids)} already done, {len(prompts) - len(done_ids)} remaining.")
 
-    for item in tqdm(prompts, desc=args.model):
-        if item["id"] in done_ids:
-            continue
-        try:
-            answer = generate_answer(item["prompt"], tokenizer, model, args.model,
-                                     args.max_tokens, temperature, top_p)
-        except Exception as e:
-            print(f"\nError on id={item['id']}: {e}")
-            answer = f"ERROR: {e}"
-        results.append({
-            "id":     item["id"],
-            "prompt": item["prompt"],
-            "answer": answer,
-            "model":  args.model,
-        })
-        # Save after every prompt so a crash loses at most one item
-        with open(out_path, "w", encoding="utf-8") as f:
+    def save():
+        # atomic write so a crash mid-save can't corrupt the checkpoint
+        tmp = out_path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
             json.dump(results, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, out_path)
+
+    todo = [p for p in prompts if p["id"] not in done_ids]
+    bs = args.batch_size
+    save_every = 128                 # checkpoint cadence, independent of batch size
+    last_saved = len(results)
+    for i in tqdm(range(0, len(todo), bs), desc=args.model):
+        chunk = todo[i:i + bs]
+        try:
+            answers = generate_batch([c["prompt"] for c in chunk], tokenizer, model,
+                                     args.model, args.max_tokens, temperature, top_p)
+        except Exception as e:
+            print(f"\nError on batch at {i}: {e}")
+            answers = [f"ERROR: {e}"] * len(chunk)
+        for c, a in zip(chunk, answers):
+            results.append({"id": c["id"], "prompt": c["prompt"], "answer": a, "model": args.model})
+        if len(results) - last_saved >= save_every:
+            save()
+            last_saved = len(results)
+    save()                            # final flush (remaining < save_every)
 
     print(f"Saved {len(results)} answers -> {out_path}")
 
