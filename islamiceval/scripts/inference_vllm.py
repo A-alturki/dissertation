@@ -13,6 +13,16 @@ from vllm import LLM, SamplingParams
 
 NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
 
+# jais tokenizers ship no chat_template; use jais-13b-chat's documented prompt
+# format (our SYSTEM_PROMPT folded into the Instruction). Built manually, not via
+# apply_chat_template.
+JAIS_MODELS = {"jais-13b", "jais-70b"}
+JAIS_PROMPT_TEMPLATE = (
+    "### Instruction: {system}\n\n"
+    "أكمل المحادثة أدناه بين [|Human|] و [|AI|]:\n"
+    "### Input: [|Human|] {prompt}\n### Response: [|AI|]"
+)
+
 THINKING_KWARGS = {
     "fanar-2-27b":           {"no_thinking": True},
     "qwen3-0.6b":            {"enable_thinking": False},
@@ -243,10 +253,13 @@ def main():
     conversations = []
     for item in prompts:
         try:
-            text = tokenizer.apply_chat_template(
-                build_messages(item), tokenize=False, add_generation_prompt=True,
-                **extra_template_kwargs
-            )
+            if args.model in JAIS_MODELS:
+                text = JAIS_PROMPT_TEMPLATE.format(system=SYSTEM_PROMPT, prompt=item["prompt"])
+            else:
+                text = tokenizer.apply_chat_template(
+                    build_messages(item), tokenize=False, add_generation_prompt=True,
+                    **extra_template_kwargs
+                )
         except Exception as e:
             print(f"Template error on id={item['id']}: {e} — skipping")
             text = None
