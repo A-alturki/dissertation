@@ -9,20 +9,35 @@ Usage:
 """
 
 import os, json, argparse
+# Turing (sm_75): also disable the FlashInfer top-k/top-p sampler — like the
+# attention backend, it imports flashinfer (uninstalled / can't JIT here). Must be
+# set before vLLM is imported so the EngineCore subprocess inherits it.
+os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 from vllm import LLM, SamplingParams
 from vllm.v1.attention.backends.registry import AttentionBackendEnum
 
 NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
 
-# jais tokenizers ship no chat_template; use jais-13b-chat's documented prompt
-# format (our SYSTEM_PROMPT folded into the Instruction). Built manually, not via
-# apply_chat_template.
-JAIS_MODELS = {"jais-13b", "jais-70b"}
+# Some tokenizers ship no chat_template — supply the model's prompt format
+# manually (built directly, not via apply_chat_template).
+#   jais: its documented [|Human|]/[|AI|] Instruction format.
+#   acegpt-v2: standard Llama-3 instruct format — it's Llama-3-8B based and its
+#              tokenizer just omits the template (matches how llama-3.1-8b is fed).
 JAIS_PROMPT_TEMPLATE = (
     "### Instruction: {system}\n\n"
     "أكمل المحادثة أدناه بين [|Human|] و [|AI|]:\n"
     "### Input: [|Human|] {prompt}\n### Response: [|AI|]"
 )
+LLAMA3_PROMPT_TEMPLATE = (
+    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+    "{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
+    "{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+)
+MANUAL_TEMPLATES = {
+    "jais-13b":  JAIS_PROMPT_TEMPLATE,
+    "jais-70b":  JAIS_PROMPT_TEMPLATE,
+    "acegpt-8b": LLAMA3_PROMPT_TEMPLATE,
+}
 
 THINKING_KWARGS = {
     "fanar-2-27b":           {"no_thinking": True},
@@ -265,8 +280,9 @@ def main():
     n_truncated = 0
     for item in prompts:
         try:
-            if args.model in JAIS_MODELS:
-                text = JAIS_PROMPT_TEMPLATE.format(system=SYSTEM_PROMPT, prompt=item["prompt"])
+            manual_tmpl = MANUAL_TEMPLATES.get(args.model)
+            if manual_tmpl:
+                text = manual_tmpl.format(system=SYSTEM_PROMPT, prompt=item["prompt"])
             else:
                 text = tokenizer.apply_chat_template(
                     build_messages(item), tokenize=False, add_generation_prompt=True,
