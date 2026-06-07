@@ -210,7 +210,8 @@ def run_group(args, model_names):
                "--output-dir", args.output_dir,
                "--max-tokens", str(args.max_tokens),
                "--batch-size", str(args.batch_size),
-               "--tensor-parallel", str(args.tensor_parallel)]
+               "--tensor-parallel", str(args.tensor_parallel),
+               "--attention-backend", args.attention_backend]
         if args.temperature is not None: cmd += ["--temperature", str(args.temperature)]
         if args.top_p       is not None: cmd += ["--top-p",       str(args.top_p)]
         print(f"\n{'='*60}\n[{i}/{len(model_names)}] {m}\n{'='*60}")
@@ -237,6 +238,9 @@ def main():
                         help="Override nucleus sampling top-p (default: the model's own)")
     parser.add_argument("--tensor-parallel", type=int, default=1,
                         help="Number of GPUs for tensor parallelism (for 70B+ models)")
+    parser.add_argument("--attention-backend", default="TRITON_ATTN",
+                        help="vLLM attention backend (AttentionBackendEnum name). Default "
+                             "TRITON_ATTN. Gemma (head_dim=256) needs FLEX_ATTENTION or TORCH_SDPA on Turing.")
     args = parser.parse_args()
 
     prompts = load_prompts(args.input)
@@ -255,10 +259,10 @@ def main():
         dtype="auto",
         max_model_len=max_len,
         gpu_memory_utilization=0.70,
-        # Turing (RTX 8000, sm_75): force Triton attention so vLLM never selects
-        # FlashInfer, which we can't use here (uninstalled; its kernels can't JIT on
-        # this box). FLASH_ATTN needs sm_80+; XFORMERS doesn't exist in vLLM V1.
-        attention_backend=AttentionBackendEnum.TRITON_ATTN,
+        # Turing (RTX 8000, sm_75): avoid FlashInfer (uninstalled; can't JIT here) and
+        # FLASH_ATTN (needs sm_80+). Default TRITON_ATTN; Gemma (head_dim=256) overflows
+        # Triton's shared mem, so it needs FLEX_ATTENTION/TORCH_SDPA via --attention-backend.
+        attention_backend=AttentionBackendEnum[args.attention_backend],
     )
     if args.model in MULTIMODAL_MODELS:
         llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
