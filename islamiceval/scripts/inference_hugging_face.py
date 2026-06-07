@@ -9,6 +9,9 @@ Usage:
 """
 
 import os, json, argparse
+# Reduce CUDA fragmentation (helps avoid OOM on variable-length batches). Must be
+# set before torch initializes CUDA.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 from tqdm.auto import tqdm
@@ -160,6 +163,23 @@ def build_messages(prompt: str, model_key: str) -> list:
     ]
 
 
+def generate_with_retry(prompts, tokenizer, model, model_key, max_new_tokens, temperature, top_p):
+    """Run a batch; on CUDA OOM, free cache and recursively halve it so one long
+    batch can't poison many answers. Only a lone prompt that still OOMs is recorded
+    as an error."""
+    try:
+        return generate_batch(prompts, tokenizer, model, model_key, max_new_tokens, temperature, top_p)
+    except torch.cuda.OutOfMemoryError:
+        torch.cuda.empty_cache()
+        if len(prompts) == 1:
+            print(f"\n  [OOM] single prompt too large — recording ERROR")
+            return ["ERROR: CUDA OOM on single prompt"]
+        mid = len(prompts) // 2
+        print(f"\n  [OOM] splitting batch of {len(prompts)} -> {mid}+{len(prompts)-mid}")
+        return (generate_with_retry(prompts[:mid], tokenizer, model, model_key, max_new_tokens, temperature, top_p)
+                + generate_with_retry(prompts[mid:], tokenizer, model, model_key, max_new_tokens, temperature, top_p))
+
+
 def generate_batch(prompts, tokenizer, model, model_key: str, max_new_tokens: int = 512,
                    temperature: float = None, top_p: float = None) -> list:
     """Generate answers for a batch of prompts in one model.generate() call."""
@@ -246,8 +266,12 @@ def main():
     if os.path.exists(out_path):
         with open(out_path, encoding="utf-8") as f:
             results = json.load(f)
+        before = len(results)
+        results = [r for r in results if not str(r["answer"]).startswith("ERROR")]  # retry failed ones
         done_ids = {r["id"] for r in results}
-        print(f"Resuming — {len(done_ids)} already done, {len(prompts) - len(done_ids)} remaining.")
+        dropped = before - len(results)
+        print(f"Resuming — {len(done_ids)} already done, {len(prompts) - len(done_ids)} remaining"
+              + (f" (regenerating {dropped} previous ERROR answers)" if dropped else "") + ".")
 
     def save():
         # atomic write so a crash mid-save can't corrupt the checkpoint
@@ -263,8 +287,8 @@ def main():
     for i in tqdm(range(0, len(todo), bs), desc=args.model):
         chunk = todo[i:i + bs]
         try:
-            answers = generate_batch([c["prompt"] for c in chunk], tokenizer, model,
-                                     args.model, args.max_tokens, temperature, top_p)
+            answers = generate_with_retry([c["prompt"] for c in chunk], tokenizer, model,
+                                          args.model, args.max_tokens, temperature, top_p)
         except Exception as e:
             print(f"\nError on batch at {i}: {e}")
             answers = [f"ERROR: {e}"] * len(chunk)
