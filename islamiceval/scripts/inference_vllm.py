@@ -228,6 +228,7 @@ def run_group(args, model_names):
         if args.temperature is not None: cmd += ["--temperature", str(args.temperature)]
         if args.top_p       is not None: cmd += ["--top-p",       str(args.top_p)]
         cmd += ["--prompt", args.prompt]
+        if args.limit is not None: cmd += ["--limit", str(args.limit)]
         print(f"\n{'='*60}\n[{i}/{len(model_names)}] {m}\n{'='*60}")
         if subprocess.run(cmd).returncode != 0:
             print(f"[WARN] {m} failed — continuing with the rest.")
@@ -242,6 +243,8 @@ def main():
                         help="a model key, or a group: " + " | ".join(MODEL_GROUPS))
     parser.add_argument("--input",           default="../data/classified/rag_questions.json",
                         help="prompts file: .xlsx (qid+prompt) or .json")
+    parser.add_argument("--limit",           type=int, default=None,
+                        help="Use only the first N prompts (for quick experiments)")
     parser.add_argument("--output-dir",      default="../outputs/answers/")
     parser.add_argument("--max-tokens",      type=int, default=512)
     parser.add_argument("--batch-size",      type=int, default=128,
@@ -260,6 +263,8 @@ def main():
     args = parser.parse_args()
 
     prompts = load_prompts(args.input)
+    if args.limit:
+        prompts = prompts[:args.limit]
     print(f"Loaded {len(prompts)} prompts from {args.input}")
 
     model_id = MODELS[args.model]
