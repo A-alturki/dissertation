@@ -74,6 +74,17 @@ SYSTEM_PROMPT = (
     "عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ) إن أمكن."
 )
 
+ALT_PROMPT_2025 = "أجب عن السؤال التالي و استشهد بآيات من القرآن الكريم و احاديث شريفة"
+
+ALT_PROMPT_2025_explicit = "أجب عن السؤال التالي و استشهد بآيات من القرآن الكريم و احاديث شريفة عند الاستشهاد بآية قرآنية، اذكر اسم السورة ورقم الآية. عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ)"
+
+# Selectable system prompts (choose via --prompt; non-default writes to <model>_<prompt>.json).
+PROMPTS = {
+    "default":          SYSTEM_PROMPT,
+    "alt2025":          ALT_PROMPT_2025,
+    "alt2025-explicit": ALT_PROMPT_2025_explicit,
+}
+
 # Sampling fallbacks for models whose generation_config doesn't enable sampling.
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_TOP_P       = 0.9
@@ -216,6 +227,7 @@ def run_group(args, model_names):
                "--attention-backend", args.attention_backend]
         if args.temperature is not None: cmd += ["--temperature", str(args.temperature)]
         if args.top_p       is not None: cmd += ["--top-p",       str(args.top_p)]
+        cmd += ["--prompt", args.prompt]
         print(f"\n{'='*60}\n[{i}/{len(model_names)}] {m}\n{'='*60}")
         if subprocess.run(cmd).returncode != 0:
             print(f"[WARN] {m} failed — continuing with the rest.")
@@ -243,6 +255,8 @@ def main():
     parser.add_argument("--attention-backend", default="TRITON_ATTN",
                         help="vLLM attention backend (AttentionBackendEnum name). Default "
                              "TRITON_ATTN. Gemma (head_dim=256) needs FLEX_ATTENTION or TORCH_SDPA on Turing.")
+    parser.add_argument("--prompt", choices=list(PROMPTS), default="default",
+                        help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     args = parser.parse_args()
 
     prompts = load_prompts(args.input)
@@ -283,11 +297,15 @@ def main():
     # keeping the tail (assistant cue / question end) and dropping the head.
     truncate_to = max(1, max_len - args.max_tokens)
 
+    # Active system prompt (selected via --prompt; see PROMPTS).
+    system_prompt = PROMPTS[args.prompt]
+    print(f"System prompt: {args.prompt}")
+
     def build_messages(item):
         if args.model in NO_SYSTEM_ROLE:
-            return [{"role": "user", "content": f"{SYSTEM_PROMPT}\n\n{item['prompt']}"}]
+            return [{"role": "user", "content": f"{system_prompt}\n\n{item['prompt']}"}]
         return [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": item["prompt"]},
         ]
 
@@ -299,7 +317,7 @@ def main():
         try:
             manual_tmpl = MANUAL_TEMPLATES.get(args.model)
             if manual_tmpl:
-                text = manual_tmpl.format(system=SYSTEM_PROMPT, prompt=item["prompt"])
+                text = manual_tmpl.format(system=system_prompt, prompt=item["prompt"])
             else:
                 text = tokenizer.apply_chat_template(
                     build_messages(item), tokenize=False, add_generation_prompt=True,
@@ -332,7 +350,8 @@ def main():
         return text.strip()
 
     os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, f"{args.model}.json")
+    suffix = "" if args.prompt == "default" else f"_{args.prompt}"
+    out_path = os.path.join(args.output_dir, f"{args.model}{suffix}.json")
 
     def save(results):
         # atomic: write to a temp file then replace, so a crash mid-write

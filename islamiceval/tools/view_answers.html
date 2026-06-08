@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IslamicEval — Answers Viewer</title>
+<style>
+  :root {
+    --bg:#0f1115; --panel:#171a21; --card:#1d212b; --border:#2a2f3a;
+    --txt:#e7e9ee; --muted:#9aa3b2; --accent:#6ea8fe; --err:#ff6b6b; --ok:#5ad19a;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--txt);
+         font-family:"Segoe UI",system-ui,Roboto,Helvetica,Arial,sans-serif; }
+  header { position:sticky; top:0; z-index:5; background:var(--panel);
+           border-bottom:1px solid var(--border); padding:12px 18px; }
+  .row { display:flex; gap:14px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:16px; margin:0 12px 0 0; font-weight:600; }
+  input[type=file] { color:var(--muted); }
+  #search { flex:1; min-width:220px; background:var(--card); border:1px solid var(--border);
+            color:var(--txt); border-radius:8px; padding:8px 12px; font-size:14px; }
+  .stats { color:var(--muted); font-size:13px; }
+  .stats b { color:var(--txt); }
+  .stats .errbadge { color:var(--err); }
+  main { max-width:1000px; margin:0 auto; padding:18px; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:12px;
+          padding:14px 16px; margin-bottom:14px; }
+  .card.err { border-color:var(--err); }
+  .meta { display:flex; gap:8px; align-items:center; margin-bottom:10px; flex-wrap:wrap; }
+  .badge { font-size:12px; padding:2px 9px; border-radius:999px; background:#2a3140;
+           color:var(--accent); border:1px solid var(--border); }
+  .badge.model { color:var(--ok); }
+  .badge.err { color:var(--err); border-color:var(--err); }
+  .idx { color:var(--muted); font-size:12px; margin-inline-start:auto; }
+  .label { font-size:12px; color:var(--muted); margin:8px 0 4px; }
+  .ar { direction:rtl; text-align:right; font-size:17px; line-height:1.95;
+        font-family:"Segoe UI","Noto Naskh Arabic","Traditional Arabic",Tahoma,serif;
+        white-space:pre-wrap; word-wrap:break-word; }
+  .prompt { background:#12151c; border:1px solid var(--border); border-radius:8px;
+            padding:8px 12px; font-weight:600; }
+  .answer { padding:2px 2px; }
+  .answer strong { color:#fff; }
+  .empty { color:var(--muted); text-align:center; padding:60px 20px; }
+  .hint { color:var(--muted); font-size:12px; margin-top:6px; }
+  mark { background:#5a4a00; color:#ffe; padding:0 2px; border-radius:3px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>IslamicEval Answers</h1>
+    <input id="file" type="file" accept=".json">
+    <input id="search" type="text" placeholder="filter by id or text…">
+    <span class="stats" id="stats"></span>
+  </div>
+  <div class="hint">Pick a <code>&lt;model&gt;.json</code> from <code>outputs/answers/</code>. RTL-rendered; ERROR answers are flagged red.</div>
+</header>
+<main>
+  <div id="list"></div>
+  <div class="empty" id="placeholder">Open a model JSON file to begin.</div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let DATA = [];          // full array of {id, prompt, answer, model}
+let FILENAME = "";
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+}
+// minimal markdown: **bold** -> <strong>; keep newlines via white-space:pre-wrap
+function fmt(s){
+  let h = escapeHtml(s);
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  return h;
+}
+function highlight(html, q){
+  if(!q) return html;
+  try {
+    const re = new RegExp('('+q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    return html.replace(re, '<mark>$1</mark>');
+  } catch(e){ return html; }
+}
+
+function isErr(a){ return String(a).startsWith('ERROR'); }
+
+function render(){
+  const q = $('search').value.trim();
+  const ql = q.toLowerCase();
+  const items = DATA.filter(x =>
+    !q || String(x.id).toLowerCase().includes(ql)
+       || String(x.prompt||'').toLowerCase().includes(ql)
+       || String(x.answer||'').toLowerCase().includes(ql));
+
+  const list = $('list');
+  list.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  items.forEach((x, i) => {
+    const err = isErr(x.answer);
+    const card = document.createElement('div');
+    card.className = 'card' + (err ? ' err' : '');
+    card.innerHTML =
+      '<div class="meta">' +
+        '<span class="badge">'+escapeHtml(x.id)+'</span>' +
+        (x.model ? '<span class="badge model">'+escapeHtml(x.model)+'</span>' : '') +
+        (err ? '<span class="badge err">ERROR</span>' : '') +
+        '<span class="idx">#'+(i+1)+'</span>' +
+      '</div>' +
+      (x.prompt!==undefined ? '<div class="label">السؤال — prompt</div>' +
+        '<div class="ar prompt">'+highlight(escapeHtml(x.prompt), q)+'</div>' : '') +
+      '<div class="label">الإجابة — answer</div>' +
+      '<div class="ar answer">'+highlight(fmt(x.answer), q)+'</div>';
+    frag.appendChild(card);
+  });
+  list.appendChild(frag);
+
+  const nErr = DATA.filter(x => isErr(x.answer)).length;
+  const model = DATA.length && DATA[0].model ? DATA[0].model : '—';
+  $('stats').innerHTML =
+    '<b>'+escapeHtml(FILENAME)+'</b> · model: <b>'+escapeHtml(model)+'</b> · ' +
+    'showing <b>'+items.length+'</b>/'+DATA.length +
+    (nErr ? ' · <span class="errbadge">'+nErr+' ERROR</span>' : '');
+  $('placeholder').style.display = DATA.length ? 'none' : 'block';
+}
+
+$('file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if(!f) return;
+  FILENAME = f.name;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if(!Array.isArray(parsed)) throw new Error('Expected a JSON array of {id, prompt, answer}.');
+      DATA = parsed;
+      $('search').value = '';
+      render();
+    } catch(err){
+      DATA = [];
+      $('list').innerHTML = '';
+      $('placeholder').style.display = 'block';
+      $('placeholder').textContent = 'Could not parse: ' + err.message;
+    }
+  };
+  reader.readAsText(f, 'utf-8');
+});
+
+$('search').addEventListener('input', render);
+</script>
+</body>
+</html>
