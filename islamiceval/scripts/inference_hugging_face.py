@@ -109,6 +109,7 @@ MODELS = {
     "phi-4-14b":             "microsoft/phi-4",
     "glm-4-9b":              "THUDM/glm-4-9b-chat",
     "command-r-7b":          "CohereForAI/c4ai-command-r7b-12-2024",
+    
 
     # ==========================================================
     # HEAVY COMPUTE — need A100 80GB+ or multi-GPU
