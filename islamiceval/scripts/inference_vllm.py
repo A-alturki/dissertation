@@ -166,6 +166,7 @@ MODELS = {
     "deepseek-r1-llama-8b":  "deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
 
     # ==================== Other =============================
+    "phi-3.5":             "microsoft/Phi-3.5-mini-instruct",
     "phi-4-14b":             "microsoft/phi-4",
     "glm-4-9b":              "THUDM/glm-4-9b-chat",
     "command-r-7b":          "CohereForAI/c4ai-command-r7b-12-2024",
