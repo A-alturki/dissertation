@@ -1,7 +1,7 @@
 # Data files — too large / sensitive for version control
 data/raw/*
 data/data_experiments/*
-
+data/corpora/*
 # Model outputs — answers + annotations are tracked (text JSON, synced via git).
 # analysis/ stays ignored (plots/large derived artifacts).
 outputs/analysis/
