@@ -43,6 +43,13 @@ SYSTEM_PROMPT = (
     "عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ) إن أمكن."
 )
 
+ALT_PROMPT_2025 = "أجب عن السؤال التالي و استشهد بآيات من القرآن الكريم و احاديث شريفة"
+
+ALT_PROMPT_2025_explicit = "أجب عن السؤال التالي و استشهد بآيات من القرآن الكريم و احاديث شريفة عند الاستشهاد بآية قرآنية، اذكر اسم السورة ورقم الآية. عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ)"
+
+
+PROMPTS = {"default": SYSTEM_PROMPT, "alt2025": ALT_PROMPT_2025, "alt2025-explicit": ALT_PROMPT_2025_explicit}
+
 # Sampling fallbacks for models whose generation_config doesn't enable sampling.
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_TOP_P       = 0.9
@@ -246,7 +253,13 @@ def main():
     parser.add_argument("--top-p",       type=float, default=None,
                         help="Override nucleus sampling top-p (default: the model's own)")
     parser.add_argument("--no-quantize", action="store_true", help="Disable 4-bit quantization (for A6000)")
+    parser.add_argument("--prompt", choices=list(PROMPTS), default="default",
+                        help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     args = parser.parse_args()
+
+    global SYSTEM_PROMPT
+    SYSTEM_PROMPT = PROMPTS[args.prompt]
+    print(f"System prompt: {args.prompt}")
 
     prompts = load_prompts(args.input)
     print(f"Loaded {len(prompts)} prompts from {args.input}")
@@ -260,7 +273,8 @@ def main():
     print(f"Sampling on — temperature={temperature}, top_p={top_p}")
 
     os.makedirs(args.output_dir, exist_ok=True)
-    out_path = os.path.join(args.output_dir, f"{args.model}.json")
+    suffix = "" if args.prompt == "default" else f"_{args.prompt}"
+    out_path = os.path.join(args.output_dir, f"{args.model}{suffix}.json")
 
     # Resume: skip prompts already processed
     done_ids = set()
