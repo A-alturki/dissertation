@@ -264,7 +264,7 @@ def main():
                         help="prompts file: .xlsx (qid+prompt) or .json")
     parser.add_argument("--limit",           type=int, default=None,
                         help="Use only the first N prompts (for quick experiments)")
-    parser.add_argument("--output-dir",      default="../outputs/answers/")
+    parser.add_argument("--output-dir",      default="../outputs/answers/explicit/")
     parser.add_argument("--max-tokens",      type=int, default=512)
     parser.add_argument("--batch-size",      type=int, default=128,
                         help="Checkpoint interval: generate and save this many prompts at a time")
