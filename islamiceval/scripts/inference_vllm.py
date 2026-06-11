@@ -203,6 +203,11 @@ MODELS = {
 
 islamic_eval_models = ["allam-7b", "jais-13b", "acegpt-8b", "silma-9b", "fanar-1-9b", "qwen3-8b", "gemma-3-12b", "mistral-7b", "deepseek-r1-llama-8b", "llama-3.1-8b"]
 
+### NEXT MODELS FOR COMPLETE ANALYSIS
+# "fanar-2-27b", "qwen3-14b/27B", "qwen3.5-9B/27B" ,  "llama-4-scout", "gemma-3-27b", "mistral-small-24b", "mixtral-8x7b",
+# "LFM2.5-8B-A1B", "Gemma 4 12B", "AceGPT V2 7B, 8B, 13B, 32B" Applied-Innovation-Center/AIC-1 33B", "CohereForAI/c4ai-command-r7b-arabic-02-2025", "Yehia-7B-preview"
+# "Jais 30B", "CohereForAI/aya-expanse-32b",  
+
 # Named groups you can pass to --model to run several models back-to-back.
 MODEL_GROUPS = {
     "islamic-eval": islamic_eval_models,

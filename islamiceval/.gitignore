@@ -2,9 +2,18 @@
 data/raw/*
 data/data_experiments/*
 data/corpora/*
-# Model outputs — answers + annotations are tracked (text JSON, synced via git).
-# analysis/ stays ignored (plots/large derived artifacts).
+
+# === JSON policy ===
+# Ignore ALL json by default; only the raw model-generated answers (produced on the
+# GPU box and synced PC<->box via git) are tracked. Everything else (annotations,
+# samples, classification, etc.) is PC-side and regenerable.
+*.json
+!outputs/answers/short_answers/*.json
+!outputs/answers/explicit/*.json
+
+# Derived / PC-side spreadsheets + plots (regenerable; not synced)
 outputs/analysis/
+outputs/answers/samples/*.xlsx
 
 # Logs
 logs/

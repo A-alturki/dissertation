@@ -40,6 +40,7 @@ load_dotenv()
 # ─────────────────────────────────────────────────────────────────────────────
 MODEL_REGISTRY = {
     # OpenAI models
+    "gpt-5.5":       ("openai",    "gpt-5.5",                   "OPENAI_API_KEY"),
     "gpt-5.4":       ("openai",    "gpt-5.4",                   "OPENAI_API_KEY"),
     "gpt-5.4-mini":   ("openai",    "gpt-5-mini",               "OPENAI_API_KEY"),
     "gpt-5.4-nano":         ("openai",    "gpt-5.4-nano",                   "OPENAI_API_KEY"),
@@ -228,8 +229,14 @@ def _do_api_call(provider: str, client: Any, model_id: str,
             ],
         )
         if is_reasoning:
-            call_kwargs["max_completion_tokens"] = 4096
-            # reasoning models ignore temperature; omit it to avoid API errors
+            # 8k budget: enough headroom to avoid the silent empty-output truncation
+            # seen at 4k, without overpaying. With "minimal" effort reasoning tokens are
+            # small, so 8k is comfortable.
+            call_kwargs["max_completion_tokens"] = 8192
+            # reasoning models ignore temperature; omit it to avoid API errors.
+            # gpt-5.x effort scale is none<low<medium<high<xhigh — "none" is the lowest
+            # (≈ no hidden reasoning). o-series doesn't accept "none"; floor it at "low".
+            call_kwargs["reasoning_effort"] = "none" if model_id.startswith("gpt-5") else "low"
         else:
             call_kwargs["max_tokens"] = 4096
             call_kwargs["temperature"] = 0.1
@@ -297,10 +304,14 @@ def _do_api_call(provider: str, client: Any, model_id: str,
         # New google-genai SDK: client was created in get_client()
         from google.genai import types as genai_types
 
-        # Build config — add JSON schema enforcement if provided
+        # Build config — add JSON schema enforcement if provided.
+        # http_options.timeout (ms) makes a stalled request RAISE instead of
+        # blocking the worker thread forever — otherwise a single hung call can
+        # freeze the whole ThreadPoolExecutor run (no exception => no retry).
         config_kwargs = {
             "temperature": 0.1,
             "system_instruction": system_msg,
+            "http_options": genai_types.HttpOptions(timeout=120_000),
         }
         if schema:
             config_kwargs["response_mime_type"] = "application/json"

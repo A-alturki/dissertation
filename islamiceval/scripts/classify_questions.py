@@ -20,7 +20,15 @@ from tqdm.auto import tqdm
 
 load_dotenv()
 
-MODEL = "gpt-4.1-nano"
+DEFAULT_MODEL = "gpt-4.1-nano"
+REASONING_PREFIXES = ("gpt-5", "o1", "o3", "o4", "o5")
+
+# USD per 1M tokens: (input, cached_input, output)
+PRICES = {
+    "gpt-4.1-nano": (0.10, 0.025, 0.40),
+    "gpt-5.4-mini": (0.75, 0.075, 4.50),
+    "gpt-5.4-nano": (0.20, 0.02,  1.25),
+}
 
 CATEGORIES = ["Aqidah", "Fiqh", "Hadith Studies", "Quranic Studies",
               "Sirah and Islamic History", "Inheritance", "Family Law", "Islamic Finance"]
@@ -202,31 +210,51 @@ def load_prompts(path):
     raise ValueError(f"Unsupported input '{ext}' (use .xlsx or .json)")
 
 
-def classify_one(client, item):
-    """Return (id, record). Retries transient failures; records an error after 5 tries."""
+def classify_one(client, item, model, is_reasoning):
+    """Return (id, record, usage). Retries transient failures; records an error after 5 tries.
+    usage = {"in","cached","out"} token counts (None on failure)."""
     for attempt in range(5):
         try:
-            r = client.chat.completions.create(
-                model=MODEL,
+            kw = dict(
+                model=model,
                 messages=[{"role": "system", "content": SYSTEM_PROMPT},
                           {"role": "user", "content": str(item["prompt"])}],
-                temperature=0,
-                max_tokens=60,
                 response_format={"type": "json_schema",
                                  "json_schema": {"name": "labels", "strict": True, "schema": SCHEMA}},
             )
+            if is_reasoning:
+                # gpt-5.x lowest effort is "none"; o-series only down to "low".
+                kw["max_completion_tokens"] = 2048
+                kw["reasoning_effort"] = "none" if model.startswith("gpt-5") else "low"
+            else:
+                kw["temperature"] = 0
+                kw["max_tokens"] = 60
+            r = client.chat.completions.create(**kw)
             obj = json.loads(r.choices[0].message.content)
-            return item["id"], {"id": item["id"], "prompt": item["prompt"], **obj}
+            u = r.usage
+            ptd = getattr(u, "prompt_tokens_details", None)
+            cached = (getattr(ptd, "cached_tokens", 0) or 0) if ptd else 0
+            usage = {"in": u.prompt_tokens, "cached": cached, "out": u.completion_tokens}
+            return item["id"], {"id": item["id"], "prompt": item["prompt"], **obj}, usage
         except Exception as e:
             if attempt == 4:
-                return item["id"], {"id": item["id"], "prompt": item["prompt"], "error": str(e)[:200]}
+                return item["id"], {"id": item["id"], "prompt": item["prompt"], "error": str(e)[:200]}, None
             time.sleep(2 ** attempt)
+
+
+def load_ids(path):
+    """Read qids from a json (list of {id,...}) — e.g. a sample file or a labels file."""
+    d = json.load(open(path, encoding="utf-8"))
+    return {x["id"] for x in d if isinstance(x, dict) and "id" in x}
 
 
 def main():
     ap = argparse.ArgumentParser(description="Classify Islamic questions (category/difficulty/divergence)")
+    ap.add_argument("--model", default=DEFAULT_MODEL, help="OpenAI model id (e.g. gpt-4.1-nano, gpt-5.4-mini, gpt-5.4-nano)")
     ap.add_argument("--input",  default="../data/classified/accepted_combined_fixed.xlsx")
-    ap.add_argument("--output", default="../outputs/classification/question_labels.json")
+    ap.add_argument("--output", default=None, help="defaults to ../outputs/classification/labels_<model><tag>.json")
+    ap.add_argument("--ids-from", default=None, help="restrict to the qids found in this json (sample/labels file)")
+    ap.add_argument("--tag", default="", help="suffix for the default output filename (e.g. _100, _sample65)")
     ap.add_argument("--workers", type=int, default=16)
     ap.add_argument("--save-every", type=int, default=100)
     ap.add_argument("--limit", type=int, default=None, help="classify only the first N (testing)")
@@ -237,49 +265,80 @@ def main():
     if not key:
         sys.exit("No OpenAI key — use --api-key, or set OPENAI_API_KEY in .env")
 
+    model = args.model
+    is_reasoning = model.startswith(REASONING_PREFIXES)
+    output = args.output or f"../outputs/classification/labels_{model}{args.tag}.json"
+
     prompts = load_prompts(args.input)
+    if args.ids_from:
+        keep = load_ids(args.ids_from)
+        prompts = [p for p in prompts if p["id"] in keep]
+        print(f"Restricted to {len(prompts)} questions (ids from {args.ids_from})")
     if args.limit:
         prompts = prompts[:args.limit]
-    print(f"Loaded {len(prompts)} questions from {args.input}")
+    print(f"Loaded {len(prompts)} questions | model={model} (reasoning={is_reasoning}) -> {output}")
 
-    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+    os.makedirs(os.path.dirname(output), exist_ok=True)
     results = {}
-    if os.path.exists(args.output):
-        for r in json.load(open(args.output, encoding="utf-8")):
+    if os.path.exists(output):
+        for r in json.load(open(output, encoding="utf-8")):
             results[r["id"]] = r
     todo = [p for p in prompts if "category" not in results.get(p["id"], {})]
     print(f"{len(results)} already labeled, {len(todo)} to do.")
 
     def save():
-        tmp = args.output + ".tmp"
+        tmp = output + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(list(results.values()), f, ensure_ascii=False, indent=2)
-        os.replace(tmp, args.output)
+        os.replace(tmp, output)
 
     client = OpenAI(api_key=key)
     done = 0
+    tin = tcached = tout = 0
+    t0 = time.time()
     with ThreadPoolExecutor(max_workers=args.workers) as ex:
-        futs = [ex.submit(classify_one, client, p) for p in todo]
-        for f in tqdm(as_completed(futs), total=len(futs), desc="classify"):
-            i, rec = f.result()
+        futs = [ex.submit(classify_one, client, p, model, is_reasoning) for p in todo]
+        for f in tqdm(as_completed(futs), total=len(futs), desc=model):
+            i, rec, usage = f.result()
             results[i] = rec
+            if usage:
+                tin += usage["in"]; tcached += usage["cached"]; tout += usage["out"]
             done += 1
             if done % args.save_every == 0:
                 save()
     save()
+    wall = time.time() - t0
 
     # summary
     ok = [r for r in results.values() if "category" in r]
     err = len(results) - len(ok)
     from collections import Counter
     cats = Counter(r["category"] for r in ok)
-    print(f"\nLabeled {len(ok)} ({err} errors) -> {args.output}")
+    print(f"\nLabeled {len(ok)} ({err} errors) -> {output}")
     print("Category distribution:")
     for c, n in cats.most_common():
         print(f"  {c:28} {n}")
     if ok:
         print(f"Difficulty mean: {sum(r['difficulty'] for r in ok)/len(ok):.2f} | "
               f"Divergence mean: {sum(r['divergence'] for r in ok)/len(ok):.2f}")
+
+    # ── token + cost report (this run only) ──
+    n = max(done, 1)
+    pin, pcached, pout = PRICES.get(model, (None, None, None))
+    uncached = tin - tcached
+    print(f"\n=== TOKENS / COST ({done} calls, {wall:.0f}s) | model={model} ===")
+    print(f"  input {tin:,} (cached {tcached:,} = {100*tcached/max(tin,1):.0f}%, uncached {uncached:,}) | output {tout:,}")
+    print(f"  avg/question: in {tin/n:.0f} (cached {tcached/n:.0f}) | out {tout/n:.0f}")
+    if pin is not None:
+        cost = (uncached*pin + tcached*pcached + tout*pout) / 1e6
+        per_q = cost / n
+        print(f"  cost this run: ${cost:.4f}  (${per_q*1000:.4f}/1k questions)")
+        print(f"  est. full 8,323: ${per_q*8323:.2f}")
+        # also show a no-cache worst case for reference
+        nocache = (tin*pin + tout*pout) / 1e6
+        print(f"  (pricing {pin}/{pcached}/{pout} per 1M in/cached/out; no-cache would be ${nocache:.4f})")
+    else:
+        print(f"  (no PRICES entry for '{model}' — add one to report cost)")
 
 
 if __name__ == "__main__":
