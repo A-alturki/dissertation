@@ -56,6 +56,12 @@ THINKING_KWARGS = {
     "qwen3-14b":             {"enable_thinking": False},
     "qwen3-30b-a3b":         {"enable_thinking": False},
     "qwen3-32b":             {"enable_thinking": False},
+    # Gemma 4 has a built-in thinking mode; disable it for clean citation answers
+    # (same chat_template kwarg as Qwen3).
+    "gemma-4-e4b":           {"enable_thinking": False},
+    "gemma-4-12b":           {"enable_thinking": False},
+    "gemma-4-26b-a4b":       {"enable_thinking": False},
+    "gemma-4-31b":           {"enable_thinking": False},
 }
 
 STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b"}
@@ -65,6 +71,7 @@ STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-l
 # Passing limit_mm_per_prompt={"image": 0} skips that profiling.
 # All other models in MODELS are text-only — don't pass this param to them.
 MULTIMODAL_MODELS = {"gemma-3-4b", "gemma-3-12b", "gemma-3-27b",
+                     "gemma-4-e4b", "gemma-4-12b", "gemma-4-26b-a4b", "gemma-4-31b",
                      "llama-4-scout", "llama-4-maverick"}
 
 SYSTEM_PROMPT = (
@@ -167,6 +174,13 @@ MODELS = {
     "gemma-3-4b":            "google/gemma-3-4b-it",
     "gemma-3-12b":           "google/gemma-3-12b-it",
     "gemma-3-27b":           "google/gemma-3-27b-it",
+    # Gemma 4 (released 2026-04-02; multimodal, has a "thinking" mode). Supported by
+    # vLLM >=0.19 + transformers >=5.5.0 — the box (vLLM 0.22 / tf 5.10) qualifies.
+    # On Turing use --attention-backend FLEX_ATTENTION (head_dim=256 overflows Triton).
+    "gemma-4-e4b":           "google/gemma-4-E4B-it",
+    "gemma-4-12b":           "google/gemma-4-12B-it",
+    "gemma-4-26b-a4b":       "google/gemma-4-26B-A4B-it",   # MoE, 4B active
+    "gemma-4-31b":           "google/gemma-4-31B-it",
 
     # ==================== Mistral family ====================
     "mistral-7b":            "mistralai/Mistral-7B-Instruct-v0.3",
