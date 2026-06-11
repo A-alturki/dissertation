@@ -31,6 +31,11 @@ THINKING_KWARGS = {
     "qwen3-14b":             {"enable_thinking": False},
     "qwen3-30b-a3b":         {"enable_thinking": False},
     "qwen3-32b":             {"enable_thinking": False},
+    # Gemma 4 has a built-in thinking mode — disable for clean citation answers.
+    "gemma-4-e4b":           {"enable_thinking": False},
+    "gemma-4-12b":           {"enable_thinking": False},
+    "gemma-4-26b-a4b":       {"enable_thinking": False},
+    "gemma-4-31b":           {"enable_thinking": False},
 }
 
 # Models whose <think> blocks must be stripped in post-processing (no template flag).
@@ -103,6 +108,12 @@ MODELS = {
     "gemma-3-4b":            "google/gemma-3-4b-it",
     "gemma-3-12b":           "google/gemma-3-12b-it",
     "gemma-3-27b":           "google/gemma-3-27b-it",
+    # Gemma 4 (2026-04). HF path — proven route for Gemma on Turing when vLLM's
+    # attention backends don't work (TRITON overflow / FLEX graph-break / no TORCH_SDPA).
+    "gemma-4-e4b":           "google/gemma-4-E4B-it",
+    "gemma-4-12b":           "google/gemma-4-12B-it",
+    "gemma-4-26b-a4b":       "google/gemma-4-26B-A4B-it",
+    "gemma-4-31b":           "google/gemma-4-31B-it",
 
     # ==================== Mistral family ====================
     "mistral-7b":            "mistralai/Mistral-7B-Instruct-v0.3",
