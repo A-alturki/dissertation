@@ -277,6 +277,9 @@ def main():
     parser.add_argument("--attention-backend", default="TRITON_ATTN",
                         help="vLLM attention backend (AttentionBackendEnum name). Default "
                              "TRITON_ATTN. Gemma (head_dim=256) needs FLEX_ATTENTION or TORCH_SDPA on Turing.")
+    parser.add_argument("--enforce-eager", action="store_true",
+                        help="Disable torch.compile/CUDA graphs. Use if engine init fails with a "
+                             "Dynamo 'graph break' (e.g. Gemma 4 on Turing/sm_75).")
     parser.add_argument("--prompt", choices=list(PROMPTS), default="default",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     args = parser.parse_args()
@@ -304,6 +307,10 @@ def main():
         # Triton's shared mem, so it needs FLEX_ATTENTION/TORCH_SDPA via --attention-backend.
         attention_backend=AttentionBackendEnum[args.attention_backend],
     )
+    if args.enforce_eager:
+        # Disable torch.compile / CUDA graphs — avoids Dynamo "graph break" failures at
+        # engine init (e.g. Gemma 4 on Turing/sm_75). Slower, but robust.
+        llm_kwargs["enforce_eager"] = True
     if args.model in MULTIMODAL_MODELS:
         llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
     if args.model in TOKENIZER_OVERRIDE:
