@@ -266,6 +266,8 @@ def main():
     parser.add_argument("--no-quantize", action="store_true", help="Disable 4-bit quantization (for A6000)")
     parser.add_argument("--prompt", choices=list(PROMPTS), default="default",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
+    parser.add_argument("--limit", type=int, default=None,
+                        help="Only process the first N prompts (for smoke tests)")
     args = parser.parse_args()
 
     global SYSTEM_PROMPT
