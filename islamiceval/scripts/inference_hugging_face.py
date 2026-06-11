@@ -275,6 +275,8 @@ def main():
     print(f"System prompt: {args.prompt}")
 
     prompts = load_prompts(args.input)
+    if args.limit:
+        prompts = prompts[:args.limit]
     print(f"Loaded {len(prompts)} prompts from {args.input}")
 
     model_id = MODELS[args.model]
