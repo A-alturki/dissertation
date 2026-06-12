@@ -16,7 +16,7 @@ os.environ.setdefault("VLLM_USE_FLASHINFER_SAMPLER", "0")
 from vllm import LLM, SamplingParams
 from vllm.v1.attention.backends.registry import AttentionBackendEnum
 
-NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b"}
+NO_SYSTEM_ROLE = {"jais-13b", "jais-70b", "acegpt-8b", "acegpt-32b", "acegpt-70b"}
 
 # Some tokenizers ship no chat_template — supply the model's prompt format
 # manually (built directly, not via apply_chat_template).
@@ -37,6 +37,8 @@ MANUAL_TEMPLATES = {
     "jais-13b":             JAIS_PROMPT_TEMPLATE,
     "jais-70b":             JAIS_PROMPT_TEMPLATE,
     "acegpt-8b":            LLAMA3_PROMPT_TEMPLATE,
+    "acegpt-32b":           LLAMA3_PROMPT_TEMPLATE,
+    "acegpt-70b":           LLAMA3_PROMPT_TEMPLATE,
     "deepseek-r1-llama-8b": LLAMA3_PROMPT_TEMPLATE,
 }
 
@@ -56,6 +58,12 @@ THINKING_KWARGS = {
     "qwen3-14b":             {"enable_thinking": False},
     "qwen3-30b-a3b":         {"enable_thinking": False},
     "qwen3-32b":             {"enable_thinking": False},
+    "qwen3.5-0.8b":          {"enable_thinking": False},
+    "qwen3.5-2b":            {"enable_thinking": False},
+    "qwen3.5-4b":            {"enable_thinking": False},
+    "qwen3.5-9b":            {"enable_thinking": False},
+    "qwen3.5-27b":           {"enable_thinking": False},
+    "qwen3.5-35b-a3b":       {"enable_thinking": False},
     # Gemma 4 has a built-in thinking mode; disable it for clean citation answers
     # (same chat_template kwarg as Qwen3).
     "gemma-4-e4b":           {"enable_thinking": False},
@@ -64,7 +72,8 @@ THINKING_KWARGS = {
     "gemma-4-31b":           {"enable_thinking": False},
 }
 
-STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b"}
+STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b",
+                  "lfm2.5-8b-a1b"}  # LFM2.5 always emits CoT; verify its delimiter is <think>…</think>
 
 # Gemma-3 is multimodal (vision+text). vLLM profiles the vision encoder at
 # startup even for text-only inference, which OOMs on small MIG slices.
@@ -154,6 +163,8 @@ MODELS = {
     "yehia-7b":              "Navid-AI/Yehia-7B-preview",        # ALLaM-7B based (Llama arch)
     "jais-13b":              "inceptionai/jais-13b-chat",
     "acegpt-8b":             "FreedomIntelligence/AceGPT-v2-8B-Chat",
+    "acegpt-32b":            "FreedomIntelligence/AceGPT-v2-32B-Chat",   # v2; tp=2 on RTX 8000
+    "acegpt-70b":            "FreedomIntelligence/AceGPT-v2-70B-Chat",   # v2; tp=4 (+maybe quant)
     "silma-9b":              "silma-ai/SILMA-9B-Instruct-v1.0",
     "fanar-1-9b":            "QCRI/Fanar-1-9B-Instruct",
     "fanar-2-27b":           "QCRI/Fanar-2-27B-Instruct",
@@ -165,6 +176,14 @@ MODELS = {
     "qwen3-8b":              "Qwen/Qwen3-8B",
     "qwen3-14b":             "Qwen/Qwen3-14B",
     "qwen3-30b-a3b":         "Qwen/Qwen3-30B-A3B",           # MoE, 3B active
+
+    # ==================== Qwen3.5 family (2026-02) =========
+    "qwen3.5-0.8b":          "Qwen/Qwen3.5-0.8B",
+    "qwen3.5-2b":            "Qwen/Qwen3.5-2B",
+    "qwen3.5-4b":            "Qwen/Qwen3.5-4B",
+    "qwen3.5-9b":            "Qwen/Qwen3.5-9B",
+    "qwen3.5-27b":           "Qwen/Qwen3.5-27B",             # tp=2 on RTX 8000
+    "qwen3.5-35b-a3b":       "Qwen/Qwen3.5-35B-A3B",         # MoE, 3B active; tp=2
 
     # ==================== Llama family (gated) ==============
     "llama-3.2-3b":          "meta-llama/Llama-3.2-3B-Instruct",
@@ -197,6 +216,7 @@ MODELS = {
     "glm-4-9b":              "THUDM/glm-4-9b-chat",
     "command-r-7b":          "CohereForAI/c4ai-command-r7b-12-2024",
     "command-r-7b-arabic":   "CohereForAI/c4ai-command-r7b-arabic-02-2025",
+    "lfm2.5-8b-a1b":         "LiquidAI/LFM2.5-8B-A1B",       # hybrid conv+attn MoE, 1B active; always emits CoT
 
     # ==========================================================
     # HEAVY COMPUTE — need A100 80GB+ or multi-GPU
