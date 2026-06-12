@@ -75,12 +75,14 @@ THINKING_KWARGS = {
 STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b",
                   "lfm2.5-8b-a1b"}  # LFM2.5 always emits CoT; verify its delimiter is <think>…</think>
 
-# Models whose mandatory chain-of-thought needs a big output budget — 512 isn't enough
-# for the model to finish thinking AND answer (it gets cut off mid-<think>). The context
-# window (resolve_max_model_len cap) is auto-expanded to fit prompt + this many tokens.
+# Per-model output budget. 512 (default) is too small for mandatory-CoT models — they get
+# cut off mid-<think>. An int = that many output tokens (context auto-expanded to prompt+budget);
+# None = NO output cap — generate until EOS or the model's full context window (used for LFM2.5,
+# whose chain-of-thought can run very long; bounded only by UNCAPPED_CTX below).
 MAX_TOKENS_OVERRIDE = {
-    "lfm2.5-8b-a1b": 8192,   # LFM2.5's own examples use max_new_tokens=8192
+    "lfm2.5-8b-a1b": None,   # uncapped: let it finish thinking + answer (stops at EOS/context)
 }
+UNCAPPED_CTX = 32768   # context ceiling when budget is None (resolve_max_model_len caps to model max)
 
 # Gemma-3 is multimodal (vision+text). vLLM profiles the vision encoder at
 # startup even for text-only inference, which OOMs on small MIG slices.
@@ -309,7 +311,7 @@ def main():
     parser.add_argument("--enforce-eager", action="store_true",
                         help="Disable torch.compile/CUDA graphs. Use if engine init fails with a "
                              "Dynamo 'graph break' (e.g. Gemma 4 on Turing/sm_75).")
-    parser.add_argument("--prompt", choices=list(PROMPTS), default="default",
+    parser.add_argument("--prompt", choices=list(PROMPTS), default="alt2025-explicit",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     args = parser.parse_args()
 
@@ -324,9 +326,14 @@ def main():
     print(f"Sampling on — temperature={temperature}, top_p={top_p}")
 
     # Per-model output budget: CoT models (e.g. LFM2.5) need far more than the 512 default
-    # or they never finish thinking. Expand the context window to fit prompt + that budget.
-    eff_max_tokens = MAX_TOKENS_OVERRIDE.get(args.model, args.max_tokens)
-    cap = (eff_max_tokens + 4096) if args.model in MAX_TOKENS_OVERRIDE else 4096
+    # or they never finish thinking. int -> that budget (+ room for the prompt); None -> uncapped
+    # (generate to EOS / full context, ceiling UNCAPPED_CTX); absent -> the CLI --max-tokens.
+    if args.model in MAX_TOKENS_OVERRIDE:
+        eff_max_tokens = MAX_TOKENS_OVERRIDE[args.model]          # int or None
+        cap = UNCAPPED_CTX if eff_max_tokens is None else eff_max_tokens + 4096
+    else:
+        eff_max_tokens = args.max_tokens
+        cap = 4096
     max_len = resolve_max_model_len(model_id, cap=cap)
     llm_kwargs = dict(
         model=model_id,
@@ -356,10 +363,12 @@ def main():
     sampling = SamplingParams(temperature=temperature, top_p=top_p,
                               max_tokens=eff_max_tokens)
 
-    # Prompt + output must fit in max_len; leave room for eff_max_tokens of output.
-    # Over-long prompts (e.g. jais-13b's 2048 ctx) are left-truncated below,
-    # keeping the tail (assistant cue / question end) and dropping the head.
-    truncate_to = max(1, max_len - eff_max_tokens)
+    # Prompt + output must fit in max_len; leave room for the output. Over-long prompts
+    # (e.g. jais-13b's 2048 ctx) are left-truncated below, keeping the tail (assistant cue /
+    # question end). When uncapped (eff_max_tokens=None) reserve a 4096-token output floor so
+    # even a long prompt leaves room; vLLM then generates up to max_len at runtime.
+    out_reserve = eff_max_tokens if eff_max_tokens is not None else 4096
+    truncate_to = max(1, max_len - out_reserve)
 
     # Active system prompt (selected via --prompt; see PROMPTS).
     system_prompt = PROMPTS[args.prompt]
