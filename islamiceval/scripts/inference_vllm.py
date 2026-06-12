@@ -75,6 +75,13 @@ THINKING_KWARGS = {
 STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b",
                   "lfm2.5-8b-a1b"}  # LFM2.5 always emits CoT; verify its delimiter is <think>…</think>
 
+# Models whose mandatory chain-of-thought needs a big output budget — 512 isn't enough
+# for the model to finish thinking AND answer (it gets cut off mid-<think>). The context
+# window (resolve_max_model_len cap) is auto-expanded to fit prompt + this many tokens.
+MAX_TOKENS_OVERRIDE = {
+    "lfm2.5-8b-a1b": 8192,   # LFM2.5's own examples use max_new_tokens=8192
+}
+
 # Gemma-3 is multimodal (vision+text). vLLM profiles the vision encoder at
 # startup even for text-only inference, which OOMs on small MIG slices.
 # Passing limit_mm_per_prompt={"image": 0} skips that profiling.
@@ -316,7 +323,11 @@ def main():
     temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
     print(f"Sampling on — temperature={temperature}, top_p={top_p}")
 
-    max_len = resolve_max_model_len(model_id)
+    # Per-model output budget: CoT models (e.g. LFM2.5) need far more than the 512 default
+    # or they never finish thinking. Expand the context window to fit prompt + that budget.
+    eff_max_tokens = MAX_TOKENS_OVERRIDE.get(args.model, args.max_tokens)
+    cap = (eff_max_tokens + 4096) if args.model in MAX_TOKENS_OVERRIDE else 4096
+    max_len = resolve_max_model_len(model_id, cap=cap)
     llm_kwargs = dict(
         model=model_id,
         tensor_parallel_size=args.tensor_parallel,
@@ -343,12 +354,12 @@ def main():
     tokenizer = llm.get_tokenizer()
 
     sampling = SamplingParams(temperature=temperature, top_p=top_p,
-                              max_tokens=args.max_tokens)
+                              max_tokens=eff_max_tokens)
 
-    # Prompt + output must fit in max_len; leave room for max_tokens of output.
+    # Prompt + output must fit in max_len; leave room for eff_max_tokens of output.
     # Over-long prompts (e.g. jais-13b's 2048 ctx) are left-truncated below,
     # keeping the tail (assistant cue / question end) and dropping the head.
-    truncate_to = max(1, max_len - args.max_tokens)
+    truncate_to = max(1, max_len - eff_max_tokens)
 
     # Active system prompt (selected via --prompt; see PROMPTS).
     system_prompt = PROMPTS[args.prompt]
