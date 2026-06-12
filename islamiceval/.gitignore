@@ -10,6 +10,7 @@ data/corpora/*
 *.json
 !outputs/answers/short_answers/*.json
 !outputs/answers/explicit/*.json
+!outputs/answers/sample1500/*.json
 
 # Derived / PC-side spreadsheets + plots (regenerable; not synced)
 outputs/analysis/
