@@ -75,12 +75,15 @@ THINKING_KWARGS = {
 STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b",
                   "lfm2.5-8b-a1b"}  # LFM2.5 always emits CoT; verify its delimiter is <think>…</think>
 
-# Per-model output budget. 512 (default) is too small for mandatory-CoT models — they get
-# cut off mid-<think>. An int = that many output tokens (context auto-expanded to prompt+budget);
-# None = NO output cap — generate until EOS or the model's full context window (used for LFM2.5,
-# whose chain-of-thought can run very long; bounded only by UNCAPPED_CTX below).
+# Per-model output budget. The CLI default (1500) suits direct-answer models, but mandatory-CoT
+# models get cut off mid-<think> and need more, so they're pinned to 3000 here. An int = that many
+# output tokens (context auto-expanded to prompt+budget); None = NO output cap (generate until EOS
+# or the model's full context window, bounded by UNCAPPED_CTX below).
 MAX_TOKENS_OVERRIDE = {
-    "lfm2.5-8b-a1b": None,   # uncapped: let it finish thinking + answer (stops at EOS/context)
+    "deepseek-r1-llama-8b":  3000,   # forced CoT (no kwarg to disable) — room to think + answer
+    "deepseek-r1-qwen-32b":  3000,
+    "deepseek-r1-llama-70b": 3000,
+    "lfm2.5-8b-a1b":         3000,   # forced CoT (was uncapped) — 3000 budget for think + answer
 }
 UNCAPPED_CTX = 32768   # context ceiling when budget is None (resolve_max_model_len caps to model max)
 
@@ -296,7 +299,7 @@ def main():
     parser.add_argument("--limit",           type=int, default=None,
                         help="Use only the first N prompts (for quick experiments)")
     parser.add_argument("--output-dir",      default="../outputs/answers/explicit/")
-    parser.add_argument("--max-tokens",      type=int, default=512)
+    parser.add_argument("--max-tokens",      type=int, default=1500)
     parser.add_argument("--batch-size",      type=int, default=128,
                         help="Checkpoint interval: generate and save this many prompts at a time")
     parser.add_argument("--temperature",     type=float, default=None,
@@ -325,7 +328,7 @@ def main():
     temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
     print(f"Sampling on — temperature={temperature}, top_p={top_p}")
 
-    # Per-model output budget: CoT models (e.g. LFM2.5) need far more than the 512 default
+    # Per-model output budget: CoT models (e.g. LFM2.5) need far more than the 1500 default
     # or they never finish thinking. int -> that budget (+ room for the prompt); None -> uncapped
     # (generate to EOS / full context, ceiling UNCAPPED_CTX); absent -> the CLI --max-tokens.
     if args.model in MAX_TOKENS_OVERRIDE:

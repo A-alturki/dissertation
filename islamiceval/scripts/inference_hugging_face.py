@@ -264,7 +264,7 @@ def main():
     parser.add_argument("--top-p",       type=float, default=None,
                         help="Override nucleus sampling top-p (default: the model's own)")
     parser.add_argument("--no-quantize", action="store_true", help="Disable 4-bit quantization (for A6000)")
-    parser.add_argument("--prompt", choices=list(PROMPTS), default="default",
+    parser.add_argument("--prompt", choices=list(PROMPTS), default="alt2025-explicit",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     parser.add_argument("--limit", type=int, default=None,
                         help="Only process the first N prompts (for smoke tests)")
