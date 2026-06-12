@@ -151,6 +151,7 @@ def load_prompts(path):
 MODELS = {
     # ==================== Arabic-centric ====================
     "allam-7b":              "ALLaM-AI/ALLaM-7B-Instruct-preview",
+    "yehia-7b":              "Navid-AI/Yehia-7B-preview",        # ALLaM-7B based (Llama arch)
     "jais-13b":              "inceptionai/jais-13b-chat",
     "acegpt-8b":             "FreedomIntelligence/AceGPT-v2-8B-Chat",
     "silma-9b":              "silma-ai/SILMA-9B-Instruct-v1.0",
@@ -195,6 +196,7 @@ MODELS = {
     "phi-4-14b":             "microsoft/phi-4",
     "glm-4-9b":              "THUDM/glm-4-9b-chat",
     "command-r-7b":          "CohereForAI/c4ai-command-r7b-12-2024",
+    "command-r-7b-arabic":   "CohereForAI/c4ai-command-r7b-arabic-02-2025",
 
     # ==========================================================
     # HEAVY COMPUTE — need A100 80GB+ or multi-GPU
