@@ -12,6 +12,7 @@ data/corpora/*
 !outputs/answers/explicit/*.json
 !outputs/answers/sample1500/*.json
 !outputs/answers/explicit_1500/*.json
+!outputs/answers/explicit_large_token_size/*.json
 
 # ignnore all .csv files
 *.csv
