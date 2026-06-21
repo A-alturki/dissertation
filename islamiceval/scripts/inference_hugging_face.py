@@ -298,8 +298,14 @@ def main():
         print(f"Shard {args.shard_id}/{args.num_shards}: handling {len(prompts)} prompts")
 
     model_id = MODELS[args.model]
-    print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}")
-    tokenizer, model = load_model(model_id, quantize=not args.no_quantize)
+    # Gemma's attention logit soft-capping overflows fp16's range (±65504) -> inf/NaN ->
+    # CUDA "device-side assert". Gemma MUST load in bf16 (its training dtype; bf16 has the
+    # fp32 exponent range so it can't overflow). Every other model is numerically fine in
+    # fp16 — which on Turing (sm_75, no native bf16) is also much faster. So: gemma -> bf16,
+    # everything else -> fp16. (Only matters with --no-quantize.)
+    load_dtype = torch.bfloat16 if args.model.startswith("gemma") else torch.float16
+    print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}  dtype={load_dtype}")
+    tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype)
     print("Model loaded.")
 
     temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
