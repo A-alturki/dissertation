@@ -52,6 +52,7 @@ MODEL_REGISTRY = {
     # Google Gemini models
     "gemini-3.1-pro-preview": ("gemini", "gemini-3.1-pro-preview", "GEMINI_API_KEY"),
     "gemini-3-flash-preview":   ("gemini", "gemini-3-flash-preview",   "GEMINI_API_KEY"),
+    "gemini-3.5-flash":         ("gemini", "gemini-3.5-flash",         "GEMINI_API_KEY"),
     # Together AI (Qwen3 large — thinking disabled via enable_thinking=False)
     "Qwen3-235B":  ("together",    "Qwen/Qwen3-235B-A22B-Instruct-2507-tput", "TOGETHER_API_KEY"),
     "Qwen3-80B":   ("together",    "Qwen/Qwen3-Next-80B-A3B-Instruct",        "TOGETHER_API_KEY"),
@@ -143,7 +144,9 @@ def get_client(provider: str) -> Optional[Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def call_api(model_name: str, system_msg: str, user_prompt: str,
-             max_retries: int = 3, schema: Optional[Dict] = None):
+             max_retries: int = 3, schema: Optional[Dict] = None,
+             reasoning_effort: Optional[str] = None,
+             max_completion_tokens: Optional[int] = None):
     """Call a model and return (text, usage) where usage = {"input_tokens": N, "output_tokens": N}.
 
     Handles all four providers uniformly.  On failure retries with exponential
@@ -171,7 +174,9 @@ def call_api(model_name: str, system_msg: str, user_prompt: str,
 
     for attempt in range(max_retries):
         try:
-            text, usage = _do_api_call(provider, client, model_id, system_msg, user_prompt, schema=schema)
+            text, usage = _do_api_call(provider, client, model_id, system_msg, user_prompt, schema=schema,
+                                       reasoning_effort=reasoning_effort,
+                                       max_completion_tokens=max_completion_tokens)
             time.sleep(sleep_time)  # rate-limit pause after each successful call
             return text, usage
 
@@ -203,7 +208,9 @@ def _strip_additional_properties(schema: Dict) -> Dict:
 
 def _do_api_call(provider: str, client: Any, model_id: str,
                  system_msg: str, user_prompt: str,
-                 schema: Optional[Dict] = None):
+                 schema: Optional[Dict] = None,
+                 reasoning_effort: Optional[str] = None,
+                 max_completion_tokens: Optional[int] = None):
     """Low-level API dispatch.  Raises on error.  Returns (text, usage).
 
     usage = {"input_tokens": int, "output_tokens": int}
@@ -229,16 +236,22 @@ def _do_api_call(provider: str, client: Any, model_id: str,
             ],
         )
         if is_reasoning:
-            # 8k budget: enough headroom to avoid the silent empty-output truncation
-            # seen at 4k, without overpaying. With "minimal" effort reasoning tokens are
-            # small, so 8k is comfortable.
-            call_kwargs["max_completion_tokens"] = 8192
+            # 8k default budget avoids the silent empty-output truncation seen at 4k;
+            # callers can raise it (e.g. correction stage uses 16k).
+            call_kwargs["max_completion_tokens"] = max_completion_tokens or 8192
             # reasoning models ignore temperature; omit it to avoid API errors.
             # gpt-5.x effort scale is none<low<medium<high<xhigh — "none" is the lowest
-            # (≈ no hidden reasoning). o-series doesn't accept "none"; floor it at "low".
-            call_kwargs["reasoning_effort"] = "none" if model_id.startswith("gpt-5") else "low"
+            # (≈ no hidden reasoning). BUT gpt-5-mini / gpt-5-nano reject "none" (their
+            # floor is "minimal"); o-series rejects both, floor "low". A caller override
+            # (reasoning_effort=...) wins — the caller owns validity for that model.
+            if reasoning_effort is not None:
+                call_kwargs["reasoning_effort"] = reasoning_effort
+            elif model_id.startswith("gpt-5"):
+                call_kwargs["reasoning_effort"] = "minimal" if ("mini" in model_id or "nano" in model_id) else "none"
+            else:
+                call_kwargs["reasoning_effort"] = "low"
         else:
-            call_kwargs["max_tokens"] = 4096
+            call_kwargs["max_tokens"] = max_completion_tokens or 4096
             call_kwargs["temperature"] = 0.1
 
         # Structured output: only for OpenAI (OpenRouter may not support strict json_schema)
@@ -313,6 +326,10 @@ def _do_api_call(provider: str, client: Any, model_id: str,
             "system_instruction": system_msg,
             "http_options": genai_types.HttpOptions(timeout=120_000),
         }
+        if max_completion_tokens:
+            config_kwargs["max_output_tokens"] = max_completion_tokens
+        # NB: reasoning_effort has no direct Gemini equivalent here; it applies to the
+        # OpenAI reasoning models. Gemini uses its default thinking budget.
         if schema:
             config_kwargs["response_mime_type"] = "application/json"
             # Gemini does not support "additionalProperties" — strip it recursively

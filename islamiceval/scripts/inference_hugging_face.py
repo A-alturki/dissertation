@@ -150,7 +150,7 @@ MODELS = {
 }
 
 
-def load_model(model_id: str, quantize: bool = True):
+def load_model(model_id: str, quantize: bool = True, dtype=torch.float16):
     bnb_config = None
     if quantize:
         bnb_config = BitsAndBytesConfig(
@@ -164,12 +164,20 @@ def load_model(model_id: str, quantize: bool = True):
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    model = AutoModelForCausalLM.from_pretrained(
-        model_id,
-        quantization_config=bnb_config,
-        device_map="auto",
-        trust_remote_code=True,
-    )
+    # Force fp16 when not quantizing. Without an explicit dtype, from_pretrained loads
+    # in fp32 (~48GB for a 12B) which fills a 48GB RTX 8000 and makes device_map="auto"
+    # offload layers to CPU → catastrophic decode slowdown. fp16 (~24GB) fits fully and
+    # is Turing-native (sm_75 has NO fast bf16, so never let it fall back to bf16/fp32).
+    kw = dict(quantization_config=bnb_config, device_map="auto", trust_remote_code=True)
+    if not quantize:
+        kw["dtype"] = dtype                       # transformers v5 arg name
+    try:
+        model = AutoModelForCausalLM.from_pretrained(model_id, **kw)
+    except TypeError:                             # older transformers: torch_dtype
+        kw.pop("dtype", None)
+        if not quantize:
+            kw["torch_dtype"] = dtype
+        model = AutoModelForCausalLM.from_pretrained(model_id, **kw)
     return tokenizer, model
 
 
@@ -268,7 +276,14 @@ def main():
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     parser.add_argument("--limit", type=int, default=None,
                         help="Only process the first N prompts (for smoke tests)")
+    parser.add_argument("--num-shards", type=int, default=1,
+                        help="Split prompts across N processes (one per GPU). Each shard "
+                             "writes its own .partKofN file; merge them when all finish.")
+    parser.add_argument("--shard-id", type=int, default=0,
+                        help="Which shard (0..num_shards-1) this process handles.")
     args = parser.parse_args()
+    if not (0 <= args.shard_id < args.num_shards):
+        parser.error("--shard-id must be in [0, --num-shards)")
 
     global SYSTEM_PROMPT
     SYSTEM_PROMPT = PROMPTS[args.prompt]
@@ -278,6 +293,9 @@ def main():
     if args.limit:
         prompts = prompts[:args.limit]
     print(f"Loaded {len(prompts)} prompts from {args.input}")
+    if args.num_shards > 1:                       # data-parallel: 1 shard per GPU process
+        prompts = [p for i, p in enumerate(prompts) if i % args.num_shards == args.shard_id]
+        print(f"Shard {args.shard_id}/{args.num_shards}: handling {len(prompts)} prompts")
 
     model_id = MODELS[args.model]
     print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}")
@@ -289,7 +307,8 @@ def main():
 
     os.makedirs(args.output_dir, exist_ok=True)
     suffix = "" if args.prompt == "default" else f"_{args.prompt}"
-    out_path = os.path.join(args.output_dir, f"{args.model}{suffix}.json")
+    shard_sfx = f".part{args.shard_id}of{args.num_shards}" if args.num_shards > 1 else ""
+    out_path = os.path.join(args.output_dir, f"{args.model}{suffix}{shard_sfx}.json")
 
     # Resume: skip prompts already processed
     done_ids = set()
