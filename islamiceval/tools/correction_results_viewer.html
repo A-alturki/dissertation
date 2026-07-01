@@ -1,0 +1,234 @@
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>عرض وقياس نتائج التصحيح</title>
+<style>
+:root{--g:#15803d;--r:#b91c1c;--n:#6b7280}
+*{box-sizing:border-box}
+body{font-family:'Segoe UI',Tahoma,Arial,sans-serif;background:#f1f5f9;margin:0;color:#0f172a;line-height:1.7}
+header{position:sticky;top:0;background:#0f172a;color:#fff;padding:12px 18px;z-index:5;box-shadow:0 2px 8px #0003}
+header h1{margin:0 0 8px;font-size:1.05rem}
+.bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:.85rem}
+.bar select,.bar input[type=text]{padding:5px 8px;border-radius:6px;border:1px solid #475569;background:#1e293b;color:#fff}
+.btn{background:#2563eb;color:#fff;border:0;padding:6px 12px;border-radius:7px;cursor:pointer;font-size:.85rem}
+.btn.alt{background:#475569}
+.pill{background:#1e293b;padding:3px 9px;border-radius:999px}
+.wrap{max-width:1040px;margin:14px auto;padding:0 14px}
+.panel{background:#fff;border-radius:12px;padding:14px 16px;margin:0 0 16px;box-shadow:0 1px 4px #0001}
+table{border-collapse:collapse;width:100%;font-size:.85rem}
+th,td{border:1px solid #e2e8f0;padding:5px 9px;text-align:center}
+th{background:#f1f5f9}
+.card{background:#fff;border-radius:12px;padding:16px 18px;margin:0 0 16px;box-shadow:0 1px 4px #0001;border-right:5px solid #cbd5e1}
+.card.dis{border-right-color:#f59e0b}
+.meta{display:flex;flex-wrap:wrap;gap:7px;font-size:.74rem;margin-bottom:8px}
+.tag{background:#e2e8f0;border-radius:6px;padding:2px 8px;color:#334155}
+.tag.q{background:#dbeafe}.tag.h{background:#fef3c7}.tag.bad{background:#fee2e2;color:#991b1b;font-weight:700}
+.lbl{color:#64748b;font-size:.78rem;margin:10px 0 3px;font-weight:700}
+.q{font-weight:600}
+.ans{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:10px;white-space:pre-wrap;font-size:.9rem;max-height:230px;overflow:auto}
+mark{background:#fde68a;padding:0 2px;border-radius:3px}
+.slots{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+@media(max-width:680px){.slots{grid-template-columns:1fr}}
+.slot{border:1px solid #e2e8f0;border-radius:8px;padding:10px}
+.slot.first{background:#eff6ff}.slot.second{background:#fffbeb}
+.corr{font-size:.86rem;margin-top:4px}.src{color:#2563eb;font-size:.78rem}
+.chip{display:inline-block;font-size:.72rem;font-weight:700;color:#fff;border-radius:6px;padding:2px 7px;margin:3px 3px 0 0}
+.chip.correct{background:var(--g)}.chip.wrong{background:var(--r)}.chip.none{background:var(--n)}
+.chip .who{opacity:.85;font-weight:500}
+.manual{background:#ecfdf5;border:1px solid #6ee7b7;border-radius:6px;padding:6px;margin-top:5px;font-size:.83rem;white-space:pre-wrap}
+.hidden{display:none}
+.empty{text-align:center;color:#64748b;padding:60px 20px}
+small.hint{color:#94a3b8}
+</style></head><body>
+<header>
+  <h1>عرض وقياس نتائج التصحيح</h1>
+  <div class="bar">
+    <button class="btn" id="bAnn">📂 تحميل ملفات التقييم (JSON أو CSV، يمكن اختيار عدة)</button>
+    <button class="btn alt" id="bItems">📄 تحميل بيانات العناصر (اختياري)</button>
+    <input type="file" id="fileAnn" accept=".json,.csv,application/json,text/csv" multiple style="display:none">
+    <input type="file" id="fileItems" accept=".json,application/json" style="display:none">
+    <span class="pill" id="loaded">لم يُحمّل شيء بعد</span>
+  </div>
+  <div class="bar" style="margin-top:8px">
+    <span class="pill" id="count"></span>
+    <select id="fRef"><option value="">كل المصادر</option><option value="quran">قرآن</option><option value="hadith">حديث</option></select>
+    <select id="fModel"><option value="">كل النماذج</option></select>
+    <select id="fAnn"><option value="">كل المُقيّمين (عرض)</option></select>
+    <label class="pill"><input type="checkbox" id="fDis"> اختلاف المُقيّمين فقط</label>
+    <label class="pill"><input type="checkbox" id="fBad"> مسيء فقط</label>
+    <input type="text" id="fText" placeholder="بحث">
+  </div>
+</header>
+<div class="wrap">
+  <div class="panel" id="stats"></div>
+  <div id="list"><div class="empty"><h2>ابدأ بتحميل ملف/ملفات التقييم</h2>
+    <p>اختر تصدير التقييم <code>correction_annotations*.json</code> لمُقيّم واحد أو أكثر.<br>
+    <small class="hint">لقياس الأداء والاتفاق تكفي ملفات التقييم. ولعرض <b>نص السؤال وإجابتَي GPT‑5.4 وGemini</b> كاملةً، حمّل أيضًا ملف العناصر <code>correction_annotation.json</code>.</small></p></div></div>
+</div>
+<script>
+let ITEMS=null;            // id§span -> {question,answer,s,e,correctors}
+let ANNS=[];               // [{name, rows:[...]}]
+const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+const keyOf=(id,span)=>id+"§"+(span||"").trim();
+
+// RFC-4180-ish CSV parser: quoted fields, doubled "", embedded commas/newlines, BOM.
+function parseCSV(text){
+  text=text.replace(/^﻿/,"");
+  const rows=[];let row=[],f="",i=0,q=false;
+  while(i<text.length){const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){f+='"';i++;} else q=false; } else f+=c; }
+    else{ if(c==='"')q=true; else if(c===','){row.push(f);f="";} else if(c==='\r'){} else if(c==='\n'){row.push(f);rows.push(row);row=[];f="";} else f+=c; }
+    i++;
+  }
+  if(f.length||row.length){row.push(f);rows.push(row);}
+  return rows;
+}
+// CSV export of the annotation tool -> the same {annotator, annotations:[...]} shape as the JSON export.
+function csvToAnn(text){
+  const rows=parseCSV(text).filter(r=>r.length>1||(r[0]||"").trim());
+  const head=rows.shift().map(h=>h.trim());
+  const ix=Object.fromEntries(head.map((h,i)=>[h,i]));
+  const g=(r,k)=>r[ix[k]]!=null?r[ix[k]]:"";
+  const anns=rows.map(r=>({
+    annotator:g(r,"annotator"),corrector:g(r,"corrector"),id:g(r,"id"),
+    model:g(r,"model"),ref:g(r,"ref"),
+    judgment:(g(r,"judgment")||"").trim()||null,
+    manual_corrections:(g(r,"manual_corrections")||"").trim()?g(r,"manual_corrections").split(" ||| "):[],
+    inappropriate_question:(g(r,"inappropriate_question")||"").trim()==="1",
+    span:g(r,"span"),
+  })).filter(a=>a.id);
+  return {annotator:(anns[0]&&anns[0].annotator)||"",annotations:anns};
+}
+function readFiles(input,cb){
+  const files=[...input.files]; let n=files.length, acc=[];
+  if(!n)return;
+  files.forEach(f=>{const r=new FileReader();
+    r.onload=()=>{try{
+        const json=/\.csv$/i.test(f.name)?csvToAnn(r.result):JSON.parse(r.result);
+        acc.push({name:f.name,json});
+      }catch(e){alert("تعذّر قراءة "+f.name+"\n"+e.message);}
+      if(--n===0)cb(acc);};
+    r.readAsText(f);});
+}
+bAnn.onclick=()=>fileAnn.click();
+bItems.onclick=()=>fileItems.click();
+fileAnn.onchange=()=>readFiles(fileAnn,acc=>{
+  acc.forEach(({name,json})=>{
+    const rows=json.annotations||json.items||(Array.isArray(json)?json:[]);
+    const who=json.annotator||name.replace(/\.json$/,"");
+    const i=ANNS.findIndex(a=>a.name===who); const rec={name:who,rows};
+    if(i>=0)ANNS[i]=rec; else ANNS.push(rec);
+  });
+  rebuild();
+});
+fileItems.onchange=()=>readFiles(fileItems,acc=>{
+  ITEMS={}; const it=acc[0].json.items||acc[0].json;
+  it.forEach(o=>ITEMS[keyOf(o.id,o.span)]={question:o.question,answer:o.answer,s:o.span_start,e:o.span_end,correctors:o.correctors||{}});
+  rebuild();
+});
+
+function buildItems(){
+  const map={};
+  ANNS.forEach(a=>a.rows.forEach(r=>{
+    const k=keyOf(r.id,r.span);
+    if(!map[k])map[k]={id:r.id,ref:r.ref,model:r.model,span:r.span,first:slot(),second:slot()};
+    const s=map[k][r.corrector]; if(!s)return;
+    if(r.judgment)s.jud[a.name]=r.judgment; else if(!(a.name in s.jud))s.jud[a.name]=null;
+    if((r.manual_corrections||[]).length)s.manual[a.name]=r.manual_corrections;
+    if(r.inappropriate_question)s.bad[a.name]=true;
+  }));
+  if(ITEMS)Object.keys(map).forEach(k=>{const x=ITEMS[k]; if(x){Object.assign(map[k],{question:x.question,answer:x.answer,s:x.s,e:x.e});
+    map[k].first.prop=(x.correctors.first||{}); map[k].second.prop=(x.correctors.second||{});}});
+  return Object.values(map);
+}
+function slot(){return {jud:{},manual:{},bad:{},prop:{}};}
+
+// ---- stats ----
+function computeStats(){
+  const per=ANNS.map(a=>{let j=0,c=0,w=0,bad=0;a.rows.forEach(r=>{if(r.judgment==="correct"){c++;j++}else if(r.judgment==="wrong"){w++;j++}if(r.inappropriate_question)bad++;});
+    return {name:a.name,total:a.rows.length,judged:j,correct:c,wrong:w,bad};});
+  // pairwise agreement + kappa on slots both judged
+  const idx=ANNS.map(a=>{const m={};a.rows.forEach(r=>{if(r.judgment==="correct"||r.judgment==="wrong")m[keyOf(r.id,r.span)+"§"+r.corrector]=r.judgment;});return m;});
+  const pairs=[];
+  for(let i=0;i<ANNS.length;i++)for(let k=i+1;k<ANNS.length;k++){
+    const A=idx[i],B=idx[k];const keys=Object.keys(A).filter(x=>x in B);
+    let agr=0,ca=0,cb=0;keys.forEach(x=>{if(A[x]===B[x])agr++;if(A[x]==="correct")ca++;if(B[x]==="correct")cb++;});
+    const n=keys.length,po=n?agr/n:0;
+    const pa=n?ca/n:0,pb=n?cb/n:0,pe=pa*pb+(1-pa)*(1-pb),kappa=(1-pe)?(po-pe)/(1-pe):1;
+    pairs.push({a:ANNS[i].name,b:ANNS[k].name,n,agree:agr,po,kappa});
+  }
+  return {per,pairs};
+}
+function fmtPct(x){return (100*x).toFixed(1)+"%";}
+function renderStats(){
+  if(!ANNS.length){stats.innerHTML="";return;}
+  const {per,pairs}=computeStats();
+  let h=`<b>أداء المُقيّمين</b><table><tr><th>المُقيّم</th><th>إجمالي الخانات</th><th>مُقيَّمة</th><th>صحيح</th><th>خطأ</th><th>أسئلة مسيئة</th><th>اكتمال</th></tr>`;
+  per.forEach(p=>h+=`<tr><td>${esc(p.name)}</td><td>${p.total}</td><td>${p.judged}</td><td style="color:var(--g)">${p.correct}</td><td style="color:var(--r)">${p.wrong}</td><td>${p.bad}</td><td>${fmtPct(p.total?p.judged/p.total:0)}</td></tr>`);
+  h+=`</table>`;
+  if(pairs.length){
+    h+=`<b style="display:block;margin-top:12px">اتفاق المُقيّمين (على الخانات التي قيّمها الطرفان)</b>
+    <table><tr><th>أ</th><th>ب</th><th>خانات مشتركة</th><th>اتفاق</th><th>نسبة الاتفاق</th><th>كابا (κ)</th></tr>`;
+    pairs.forEach(p=>h+=`<tr><td>${esc(p.a)}</td><td>${esc(p.b)}</td><td>${p.n}</td><td>${p.agree}</td><td>${fmtPct(p.po)}</td><td>${p.kappa.toFixed(3)}</td></tr>`);
+    h+=`</table>`;
+  }
+  stats.innerHTML=h;
+}
+
+// ---- cards ----
+function ansHTML(it){const a=it.answer||"";if(it.s==null||it.e==null||it.e<=it.s)return esc(a);
+  return esc(a.slice(0,it.s))+"<mark>"+esc(a.slice(it.s,it.e))+"</mark>"+esc(a.slice(it.e));}
+function disagree(s){const v=Object.values(s.jud).filter(x=>x);return new Set(v).size>1;}
+function slotHTML(s,which){
+  const label=which==="first"?"إجابة GPT‑5.4":"إجابة Gemini";   // first=gpt-5.4, second=gemini-3.1-pro
+  const prop=s.prop||{};
+  let c=(prop.corrections||[]).map(x=>`<div class="corr">• ${esc(x.text)} <span class="src">${esc((x.sources||[]).join(" / "))}</span></div>`).join("");
+  const body=c || (ITEMS ? '<div class="corr" style="color:#94a3b8">لا يوجد تصحيح</div>'
+                         : '<div class="corr" style="color:#94a3b8"><small>حمّل ملف العناصر لعرض نص الإجابة</small></div>');
+  const annFilter=fAnn.value;
+  let chips=Object.entries(s.jud).filter(([who])=>!annFilter||who===annFilter)
+    .map(([who,j])=>`<span class="chip ${j||'none'}">${({correct:'صحيح',wrong:'خطأ'}[j]||'—')} <span class="who">${esc(who)}</span></span>`).join("");
+  let man=Object.entries(s.manual).filter(([who])=>!annFilter||who===annFilter)
+    .map(([who,arr])=>`<div class="manual"><b>تصحيح ${esc(who)}:</b><br>${arr.map(esc).join("<br>")}</div>`).join("");
+  return `<div class="slot ${which}"><b style="font-size:.82rem">${label}</b>
+    ${prop.verdict?`<div style="font-size:.72rem;color:#64748b">حكم النموذج: ${esc(prop.verdict)}</div>`:""}
+    ${body}
+    <div class="lbl" style="margin:8px 0 2px">حكم المُقيّم/ين</div>
+    <div>${chips||'<span class="chip none">—</span>'}</div>${man}</div>`;
+}
+function card(it){
+  const dis=disagree(it.first)||disagree(it.second);
+  const bad=Object.keys(it.first.bad).length||Object.keys(it.second.bad).length;
+  return `<div class="card ${dis?'dis':''}" data-ref="${it.ref}" data-model="${esc(it.model)}" data-dis="${dis?1:0}" data-bad="${bad?1:0}">
+   <div class="meta"><span class="tag ${it.ref==='quran'?'q':'h'}">${esc(it.ref)}</span>
+     <span class="tag">${esc(it.id)}</span><span class="tag">${esc(it.model)}</span>
+     ${bad?'<span class="tag bad">سؤال مسيء</span>':''}${dis?'<span class="tag bad" style="background:#fef3c7;color:#92400e">اختلاف</span>':''}</div>
+   ${it.question!=null?`<div class="lbl">السؤال</div><div class="q">${esc(it.question)}</div>`:""}
+   ${it.answer!=null?`<div class="lbl">الإجابة (النص المعلَّم مظلَّل)</div><div class="ans">${ansHTML(it)}</div>`
+     :`<div class="lbl">النص المُقتبَس</div><div class="ans">${esc(it.span)}</div>`}
+   <div class="slots">${slotHTML(it.first,"first")}${slotHTML(it.second,"second")}</div></div>`;
+}
+let MERGED=[];
+function rebuild(){
+  loaded.textContent=ANNS.length?`${ANNS.length} مُقيّم: ${ANNS.map(a=>a.name).join("، ")}${ITEMS?" + بيانات العناصر":""}`:"لم يُحمّل شيء بعد";
+  fModel.length=1; fAnn.length=1;
+  MERGED=buildItems();
+  [...new Set(MERGED.map(i=>i.model))].filter(Boolean).sort().forEach(m=>fModel.add(new Option(m,m)));
+  ANNS.forEach(a=>fAnn.add(new Option(a.name,a.name)));
+  list.innerHTML=MERGED.length?MERGED.map(card).join(""):'<div class="empty">لا توجد عناصر</div>';
+  renderStats(); applyFilters();
+}
+function applyFilters(){
+  const ref=fRef.value,model=fModel.value,dis=fDis.checked,bad=fBad.checked,q=fText.value.trim();
+  let n=0;
+  document.querySelectorAll(".card").forEach(c=>{let ok=true;
+    if(ref&&c.dataset.ref!==ref)ok=false;
+    if(model&&c.dataset.model!==model)ok=false;
+    if(dis&&c.dataset.dis!=="1")ok=false;
+    if(bad&&c.dataset.bad!=="1")ok=false;
+    if(q&&!c.textContent.includes(q))ok=false;
+    c.classList.toggle("hidden",!ok);if(ok)n++;});
+  count.textContent=n+" / "+MERGED.length+" عنصر";
+}
+[fRef,fModel,fDis,fBad,fText].forEach(el=>el.addEventListener("input",applyFilters));
+fAnn.addEventListener("input",()=>{list.innerHTML=MERGED.map(card).join("");applyFilters();});
+</script></body></html>

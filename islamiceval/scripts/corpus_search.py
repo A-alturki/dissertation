@@ -7,7 +7,7 @@ Deterministic candidate retrieval for the correction task (Method 2 = "judge").
 Given an INCORRECT Quran / Hadith span, find the top-K canonical texts that share
 the longest CONTIGUOUS word-run with the span, searching diacritic-insensitively
 (reuses citation_lookup.norm). These candidates are then handed to an LLM judge
-(see correct_spans.py --method judge), which picks the genuine distortion or rules
+(see correction_pipeline.py), which picks the genuine distortion or rules
 "خطأ". If this search returns nothing, the caller emits "خطأ" WITHOUT an LLM call.
 
 Search policy (per the agreed "contiguity knob"):

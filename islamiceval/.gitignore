@@ -8,10 +8,8 @@ data/corpora/*
 # GPU box and synced PC<->box via git) are tracked. Everything else (annotations,
 # samples, classification, etc.) is PC-side and regenerable.
 *.json
-!outputs/answers/short_answers/*.json
+!outputs/answers/concise_prompt/*.json
 !outputs/answers/explicit/*.json
-!outputs/answers/sample1500/*.json
-!outputs/answers/explicit_1500/*.json
 !outputs/answers/explicit_large_token_size/*.json
 
 # ignnore all .csv files

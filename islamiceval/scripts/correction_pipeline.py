@@ -17,7 +17,7 @@ same correction, by rasm-robust text match).
 
 Input: a CSV with id,model,span,ref,correctness (e.g. sample_correction_final_classified.csv;
 extra cols like error_type are carried through for analysis). Reuses annotate_spans
-plumbing (call_api, parse_json_response, MODEL_REGISTRY, PRICES via correct_spans).
+plumbing (call_api, parse_json_response, MODEL_REGISTRY); PRICES table defined locally.
 Resumable per (uid, stage, model); parallel; atomic incremental save.
 
 Usage:
@@ -31,8 +31,18 @@ from collections import Counter
 from typing import Dict, List, Optional
 
 from annotate_spans import MODEL_REGISTRY, call_api, parse_json_response
-from correct_spans import PRICES                      # reuse price table
 from citation_lookup import _TABLE                    # for rasm-robust text match
+
+# (input, output) USD per 1M tokens — placeholders, mirror annotate_typology.PRICES.
+PRICES = {
+    "gpt-5.5": (5.0, 30.0),
+    "gpt-5.4": (2.5, 15.0),
+    "gpt-5":   (1.25, 10.0),
+    "gpt-5.4-mini": (0.75, 4.5),
+    "gemini-3-flash-preview": (1.5, 9.0),
+    "gemini-3.5-flash": (1.5, 9.0),         # placeholder — update to real rate
+    "gemini-3.1-pro-preview": (2.0, 12.0),
+}
 
 GATE_MODELS    = ["gpt-5.4", "gemini-3.5-flash"]
 CORRECT_MODELS = ["gpt-5.4", "gemini-3.1-pro-preview"]
@@ -484,7 +494,7 @@ def majority_gate(gate: Dict) -> Optional[str]:
     return "خطأ" if k > c else "correctable"
 
 
-def run(input_path, output_path, stage="all", limit=None, workers=8):
+def run(input_path, output_path, stage="all", limit=None, workers=8, retry_errors=False):
     spans = load_spans(input_path)
     if limit:
         spans = spans[:limit]
@@ -492,6 +502,17 @@ def run(input_path, output_path, stage="all", limit=None, workers=8):
     for sp in spans:
         recs.setdefault(sp["uid"], {**sp, "gate": {}, "correction": {}, "oneshot": {}})
         recs[sp["uid"]].setdefault("oneshot", {})
+    if retry_errors:
+        # drop any stored model record that errored or has no verdict, so the resume
+        # task-builder (which skips uids already present) will re-issue just those calls.
+        dropped = 0
+        for rec in recs.values():
+            for stg in ("gate", "correction", "oneshot"):
+                for m in list((rec.get(stg) or {})):
+                    r = rec[stg][m]
+                    if r is None or r.get("error") or not ((r.get("prediction") or {}).get("verdict")):
+                        del rec[stg][m]; dropped += 1
+        print(f"--retry-errors: cleared {dropped} errored/empty record(s) for re-issue")
 
     lock = threading.Lock()
     GATE_SYS = GATE_PROMPT.format()
@@ -643,6 +664,8 @@ def main():
     ap.add_argument("--stage", choices=["all", "gate", "correct", "oneshot"], default="all")
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--retry-errors", action="store_true",
+                    help="re-issue calls that errored / returned no verdict in a prior run")
     args = ap.parse_args()
     for m in GATE_MODELS + CORRECT_MODELS:
         if m not in MODEL_REGISTRY:
@@ -650,7 +673,8 @@ def main():
         _, _, key = MODEL_REGISTRY[m]
         if not os.environ.get(key):
             sys.exit(f"{key} not set for {m}")
-    run(args.input, args.output, stage=args.stage, limit=args.limit, workers=args.workers)
+    run(args.input, args.output, stage=args.stage, limit=args.limit, workers=args.workers,
+        retry_errors=args.retry_errors)
 
 
 if __name__ == "__main__":

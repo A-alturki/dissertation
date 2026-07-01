@@ -23,6 +23,24 @@ python scripts/annotate.py --input outputs/answers/allam-7b.json
 python scripts/analyze.py
 ```
 
+### Data cleaning → final set
+
+```bash
+cd scripts
+# Answer cleaning (per-model *_clean.json)
+python clean_answers.py --input "../outputs/answers/explicit_large_token_size/*_alt2025-explicit.json" --truncation
+# Question appropriateness: Gemini severity -> word filters -> Gemini vulgarity
+python flag_questions_flash.py --rubric severity  --input ../outputs/classification/questions.json --n 8323 --out ../outputs/classification/qflags_full_flash3.json
+python clean_questions.py
+python flag_questions_flash.py --rubric vulgarity --input ../outputs/classification/questions_level1_wordcleaned.json --n 7722 --out ../outputs/classification/qflags_vulgarity_flash3.json
+# Assemble + verify the FINAL set (-> outputs/answers/final/, 10 models)
+python build_final_set.py && python verify_final_set.py
+```
+
+The downstream-ready dataset is **`outputs/answers/final/<model>_final.json`** (clean answers to clean,
+appropriate prompts) + **`outputs/classification/questions_final_cleaned.json`** (7,700 prompts). See
+WORK_LOG.md §§12–13 for the full method.
+
 ## Structure
 
 ```

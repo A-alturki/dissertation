@@ -109,12 +109,21 @@ def get_client(provider: str) -> Optional[Any]:
         return client
 
     elif provider == "gemini":
-        key = os.environ.get("GEMINI_API_KEY")
-        if not key:
-            return None
-        # New google-genai SDK (pip install google-genai)
+        # New google-genai SDK (pip install google-genai). Two backends:
+        #   - default: Gemini Developer API / AI Studio  (genai.Client(api_key=...))
+        #   - GEMINI_USE_VERTEX=1: Vertex AI express mode (bills GCP/Vertex credits,
+        #     e.g. free-trial), using GEMINI_VERTEX_API_KEY (falls back to GEMINI_API_KEY).
         from google import genai
-        client = genai.Client(api_key=key)
+        if os.environ.get("GEMINI_USE_VERTEX", "").lower() in ("1", "true", "yes"):
+            key = os.environ.get("GEMINI_VERTEX_API_KEY") or os.environ.get("GEMINI_API_KEY")
+            if not key:
+                return None
+            client = genai.Client(vertexai=True, api_key=key)
+        else:
+            key = os.environ.get("GEMINI_API_KEY")
+            if not key:
+                return None
+            client = genai.Client(api_key=key)
         _clients[provider] = client
         return client
 
