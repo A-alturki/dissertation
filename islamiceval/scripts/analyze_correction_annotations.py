@@ -114,8 +114,9 @@ def find_exports():
         low = p.lower()
         if low.endswith(".json") or low.endswith(".csv"):
             files.append(p)
-    # exclude builder/intermediate artifacts that are not annotator exports
-    skip = ("_first_topup", "_topup", "_original", "_combined", "_batch")
+    # exclude builder/intermediate artifacts + generated outputs that are not annotator exports
+    skip = ("_first_topup", "_topup", "_original", "_combined", "_batch",
+            "_consolidated", "_results")
     return [p for p in files if not any(s in os.path.basename(p) for s in skip)]
 
 

@@ -38,6 +38,15 @@ mark{background:#fde68a;padding:0 2px;border-radius:3px}
 .hidden{display:none}
 .empty{text-align:center;color:#64748b;padding:60px 20px}
 small.hint{color:#94a3b8}
+/* supervisor per-annotator verdict override */
+.jrow{display:flex;align-items:center;gap:5px;margin:4px 0;font-size:.8rem;flex-wrap:wrap}
+.jwho{min-width:78px;font-weight:600;color:#334155}
+.jb{font-size:.72rem;border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:2px 9px;cursor:pointer}
+.jb.correct.sel{background:var(--g);color:#fff;border-color:var(--g)}
+.jb.wrong.sel{background:var(--r);color:#fff;border-color:var(--r)}
+.jb.rev{color:#2563eb;border-color:#bfdbfe}
+.edtag{font-size:.7rem;font-weight:700;color:#a16207;background:#fef9c3;border-radius:6px;padding:2px 6px}
+.slot.hasgold{box-shadow:inset 0 0 0 2px #fbbf24}
 </style></head><body>
 <header>
   <h1>عرض وقياس نتائج التصحيح</h1>
@@ -47,6 +56,8 @@ small.hint{color:#94a3b8}
     <input type="file" id="fileAnn" accept=".json,.csv,application/json,text/csv" multiple style="display:none">
     <input type="file" id="fileItems" accept=".json,application/json" style="display:none">
     <span class="pill" id="loaded">لم يُحمّل شيء بعد</span>
+    <button class="btn" id="bExp" style="background:#a16207">⬇ تصدير المُقيّمين بعد التعديل</button>
+    <span class="pill" id="goldCount"></span>
   </div>
   <div class="bar" style="margin-top:8px">
     <span class="pill" id="count"></span>
@@ -113,10 +124,15 @@ bAnn.onclick=()=>fileAnn.click();
 bItems.onclick=()=>fileItems.click();
 fileAnn.onchange=()=>readFiles(fileAnn,acc=>{
   acc.forEach(({name,json})=>{
-    const rows=json.annotations||json.items||(Array.isArray(json)?json:[]);
-    const who=json.annotator||name.replace(/\.json$/,"");
-    const i=ANNS.findIndex(a=>a.name===who); const rec={name:who,rows};
-    if(i>=0)ANNS[i]=rec; else ANNS.push(rec);
+    // a corrected export bundles several annotators under json.annotators
+    const entries = (json.annotators&&Array.isArray(json.annotators)) ? json.annotators
+      : [{annotator:json.annotator||name.replace(/\.(json|csv)$/i,""),
+          annotations:json.annotations||json.items||(Array.isArray(json)?json:[])}];
+    entries.forEach(en=>{
+      const rows=en.annotations||[]; const who=en.annotator||name;
+      const i=ANNS.findIndex(a=>a.name===who); const rec={name:who,rows};
+      if(i>=0)ANNS[i]=rec; else ANNS.push(rec);
+    });
   });
   rebuild();
 });
@@ -132,7 +148,8 @@ function buildItems(){
     const k=keyOf(r.id,r.span);
     if(!map[k])map[k]={id:r.id,ref:r.ref,model:r.model,span:r.span,first:slot(),second:slot()};
     const s=map[k][r.corrector]; if(!s)return;
-    if(r.judgment)s.jud[a.name]=r.judgment; else if(!(a.name in s.jud))s.jud[a.name]=null;
+    const jj=effJ(a.name,r);
+    if(jj)s.jud[a.name]=jj; else if(!(a.name in s.jud))s.jud[a.name]=null;
     if((r.manual_corrections||[]).length)s.manual[a.name]=r.manual_corrections;
     if(r.inappropriate_question)s.bad[a.name]=true;
   }));
@@ -144,10 +161,10 @@ function slot(){return {jud:{},manual:{},bad:{},prop:{}};}
 
 // ---- stats ----
 function computeStats(){
-  const per=ANNS.map(a=>{let j=0,c=0,w=0,bad=0;a.rows.forEach(r=>{if(r.judgment==="correct"){c++;j++}else if(r.judgment==="wrong"){w++;j++}if(r.inappropriate_question)bad++;});
+  const per=ANNS.map(a=>{let j=0,c=0,w=0,bad=0;a.rows.forEach(r=>{const v=effJ(a.name,r);if(v==="correct"){c++;j++}else if(v==="wrong"){w++;j++}if(r.inappropriate_question)bad++;});
     return {name:a.name,total:a.rows.length,judged:j,correct:c,wrong:w,bad};});
-  // pairwise agreement + kappa on slots both judged
-  const idx=ANNS.map(a=>{const m={};a.rows.forEach(r=>{if(r.judgment==="correct"||r.judgment==="wrong")m[keyOf(r.id,r.span)+"§"+r.corrector]=r.judgment;});return m;});
+  // pairwise agreement + kappa on slots both judged (effective verdicts, after supervisor edits)
+  const idx=ANNS.map(a=>{const m={};a.rows.forEach(r=>{const v=effJ(a.name,r);if(v==="correct"||v==="wrong")m[keyOf(r.id,r.span)+"§"+r.corrector]=v;});return m;});
   const pairs=[];
   for(let i=0;i<ANNS.length;i++)for(let k=i+1;k<ANNS.length;k++){
     const A=idx[i],B=idx[k];const keys=Object.keys(A).filter(x=>x in B);
@@ -178,22 +195,31 @@ function renderStats(){
 function ansHTML(it){const a=it.answer||"";if(it.s==null||it.e==null||it.e<=it.s)return esc(a);
   return esc(a.slice(0,it.s))+"<mark>"+esc(a.slice(it.s,it.e))+"</mark>"+esc(a.slice(it.e));}
 function disagree(s){const v=Object.values(s.jud).filter(x=>x);return new Set(v).size>1;}
-function slotHTML(s,which){
+function slotHTML(s,which,it){
   const label=which==="first"?"إجابة GPT‑5.4":"إجابة Gemini";   // first=gpt-5.4, second=gemini-3.1-pro
   const prop=s.prop||{};
   let c=(prop.corrections||[]).map(x=>`<div class="corr">• ${esc(x.text)} <span class="src">${esc((x.sources||[]).join(" / "))}</span></div>`).join("");
   const body=c || (ITEMS ? '<div class="corr" style="color:#94a3b8">لا يوجد تصحيح</div>'
                          : '<div class="corr" style="color:#94a3b8"><small>حمّل ملف العناصر لعرض نص الإجابة</small></div>');
   const annFilter=fAnn.value;
-  let chips=Object.entries(s.jud).filter(([who])=>!annFilter||who===annFilter)
-    .map(([who,j])=>`<span class="chip ${j||'none'}">${({correct:'صحيح',wrong:'خطأ'}[j]||'—')} <span class="who">${esc(who)}</span></span>`).join("");
+  const gk=gid(it,which);
+  let rows=Object.entries(s.jud).filter(([who])=>!annFilter||who===annFilter)
+    .map(([who,j])=>{
+      const ed=EDITS[gk]&&(who in EDITS[gk]);
+      return `<div class="jrow"><span class="jwho">${esc(who)}</span>`+
+        `<button class="jb correct ${j==='correct'?'sel':''}" data-act="setv" data-key="${esc(gk)}" data-who="${esc(who)}" data-v="correct">صحيح</button>`+
+        `<button class="jb wrong ${j==='wrong'?'sel':''}" data-act="setv" data-key="${esc(gk)}" data-who="${esc(who)}" data-v="wrong">خطأ</button>`+
+        (ed?`<span class="edtag" title="عُدِّل بواسطة المشرف">★ مُعدَّل</span><button class="jb rev" data-act="revert" data-key="${esc(gk)}" data-who="${esc(who)}">↩ تراجع</button>`:``)+
+        `</div>`;
+    }).join("");
   let man=Object.entries(s.manual).filter(([who])=>!annFilter||who===annFilter)
     .map(([who,arr])=>`<div class="manual"><b>تصحيح ${esc(who)}:</b><br>${arr.map(esc).join("<br>")}</div>`).join("");
-  return `<div class="slot ${which}"><b style="font-size:.82rem">${label}</b>
+  const edited=EDITS[gk]&&Object.keys(EDITS[gk]).length;
+  return `<div class="slot ${which} ${edited?'hasgold':''}"><b style="font-size:.82rem">${label}</b>
     ${prop.verdict?`<div style="font-size:.72rem;color:#64748b">حكم النموذج: ${esc(prop.verdict)}</div>`:""}
     ${body}
-    <div class="lbl" style="margin:8px 0 2px">حكم المُقيّم/ين</div>
-    <div>${chips||'<span class="chip none">—</span>'}</div>${man}</div>`;
+    <div class="lbl" style="margin:8px 0 2px">حكم المُقيّم/ين <small class="hint">(اضغط صحيح/خطأ لتعديل حكم أي مُقيّم)</small></div>
+    ${rows||'<span class="chip none">—</span>'}${man}</div>`;
 }
 function card(it){
   const dis=disagree(it.first)||disagree(it.second);
@@ -205,13 +231,14 @@ function card(it){
    ${it.question!=null?`<div class="lbl">السؤال</div><div class="q">${esc(it.question)}</div>`:""}
    ${it.answer!=null?`<div class="lbl">الإجابة (النص المعلَّم مظلَّل)</div><div class="ans">${ansHTML(it)}</div>`
      :`<div class="lbl">النص المُقتبَس</div><div class="ans">${esc(it.span)}</div>`}
-   <div class="slots">${slotHTML(it.first,"first")}${slotHTML(it.second,"second")}</div></div>`;
+   <div class="slots">${slotHTML(it.first,"first",it)}${slotHTML(it.second,"second",it)}</div></div>`;
 }
 let MERGED=[];
 function rebuild(){
   loaded.textContent=ANNS.length?`${ANNS.length} مُقيّم: ${ANNS.map(a=>a.name).join("، ")}${ITEMS?" + بيانات العناصر":""}`:"لم يُحمّل شيء بعد";
   fModel.length=1; fAnn.length=1;
   MERGED=buildItems();
+  updateGoldCount();
   [...new Set(MERGED.map(i=>i.model))].filter(Boolean).sort().forEach(m=>fModel.add(new Option(m,m)));
   ANNS.forEach(a=>fAnn.add(new Option(a.name,a.name)));
   list.innerHTML=MERGED.length?MERGED.map(card).join(""):'<div class="empty">لا توجد عناصر</div>';
@@ -231,4 +258,38 @@ function applyFilters(){
 }
 [fRef,fModel,fDis,fBad,fText].forEach(el=>el.addEventListener("input",applyFilters));
 fAnn.addEventListener("input",()=>{list.innerHTML=MERGED.map(card).join("");applyFilters();});
+
+/* ===== per-annotator verdict override (supervisor) → export corrected annotator files =====
+   Fix e.g. a hadith wrongly marked خطأ only because the corpus NUMBER differs: flip that
+   annotator's verdict to صحيح. Edits are keyed per (annotator, id, span, corrector), persist in
+   localStorage, feed the agreement/κ stats live, and export as corrected annotator files. */
+let EDITS=JSON.parse(localStorage.getItem("annotator_edits_v1")||"{}");   // {cellKey:{annotator:verdict}}
+const gid=(it,which)=>it.id+"§"+(it.span||"").trim()+"§"+which;
+const rowKey=r=>r.id+"§"+(r.span||"").trim()+"§"+r.corrector;
+function effJ(who,r){const e=EDITS[rowKey(r)];return (e&&who in e)?e[who]:r.judgment;}
+function saveEdits(){localStorage.setItem("annotator_edits_v1",JSON.stringify(EDITS));updateGoldCount();}
+function updateGoldCount(){let n=0;Object.values(EDITS).forEach(o=>n+=Object.keys(o).length);
+  goldCount.textContent=n?("★ "+n+" تعديل مشرف"):"";}
+function rerenderCards(){MERGED=buildItems();renderStats();
+  list.innerHTML=MERGED.length?MERGED.map(card).join(""):'<div class="empty">لا توجد عناصر</div>';applyFilters();}
+list.addEventListener("click",e=>{const b=e.target.closest("[data-act]");if(!b)return;
+  const k=b.dataset.key,who=b.dataset.who;
+  if(b.dataset.act==="setv"){EDITS[k]=EDITS[k]||{};EDITS[k][who]=b.dataset.v;saveEdits();rerenderCards();}
+  else if(b.dataset.act==="revert"){if(EDITS[k]){delete EDITS[k][who];if(!Object.keys(EDITS[k]).length)delete EDITS[k];}saveEdits();rerenderCards();}
+});
+function dl(name,text,type){const b=new Blob([text],{type:type+";charset=utf-8"});const a=document.createElement("a");
+  a.href=URL.createObjectURL(b);a.download=name;a.click();}
+bExp.onclick=()=>{
+  if(!ANNS.length){alert("حمّل ملفات التقييم أولًا.");return;}
+  let total=0;Object.values(EDITS).forEach(o=>total+=Object.keys(o).length);
+  if(!total&&!confirm("لا توجد تعديلات بعد. تصدير الملفات كما هي؟"))return;
+  const bundle={type:"corrected_annotations",generated:new Date().toISOString(),edits:total,
+    annotators:ANNS.map(a=>({annotator:a.name,
+      annotations:a.rows.map(r=>Object.assign({},r,{judgment:effJ(a.name,r)}))}))};
+  dl("annotators_corrected.json",JSON.stringify(bundle,null,2),"application/json");  // reloadable here
+  bundle.annotators.forEach(en=>setTimeout(()=>dl(
+    en.annotator.replace(/[^\w؀-ۿ]+/g,"_")+"_corrected.json",
+    JSON.stringify({annotator:en.annotator,annotations:en.annotations},null,2),"application/json"),0));
+};
+updateGoldCount();
 </script></body></html>

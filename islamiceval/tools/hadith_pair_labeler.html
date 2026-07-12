@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>تصنيف أزواج المتون — دراسة التوسّع</title>
+<style>
+  :root{--bg:#eef1f4;--card:#fff;--same:#1e8449;--diff:#c0392b;--uns:#b7791f;--mut:#667}
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;margin:0;background:var(--bg);color:#1a1a1a}
+  header{background:#1f2d3d;color:#fff;padding:12px 18px;position:sticky;top:0;z-index:5}
+  header h1{margin:0;font-size:17px}
+  .bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;margin-top:8px;font-size:13px}
+  .bar input[type=file]{color:#cde;font-size:12px}
+  .prog{font-size:13px;color:#bcd}
+  .prog b{color:#fff}
+  #wrap{max-width:820px;margin:22px auto;padding:0 16px}
+  .pill{display:inline-block;font-size:12px;color:var(--mut);margin-bottom:6px}
+  .matn{background:var(--card);border:1px solid #dce1e7;border-radius:9px;padding:16px 18px;margin:10px 0;
+        font-size:20px;line-height:2.2;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .lblA{color:#2471a3;font-weight:700;font-size:13px}
+  .lblB{color:#7d3c98;font-weight:700;font-size:13px}
+  .btns{display:flex;gap:12px;margin:18px 0;flex-wrap:wrap}
+  .btns button{flex:1;min-width:150px;padding:14px;border-radius:9px;border:2px solid #ccc;background:#fff;
+        font-size:16px;font-weight:700;cursor:pointer;transition:.12s}
+  .btns .same{color:var(--same);border-color:#a6dcb8}
+  .btns .diff{color:var(--diff);border-color:#e6a89f}
+  .btns .uns{color:var(--uns);border-color:#e6cfa0}
+  .btns button.on.same{background:var(--same);color:#fff}
+  .btns button.on.diff{background:var(--diff);color:#fff}
+  .btns button.on.uns{background:var(--uns);color:#fff}
+  .nav{display:flex;justify-content:space-between;align-items:center;margin-top:8px}
+  .nav button{padding:8px 18px;border-radius:7px;border:1px solid #bbc;background:#fff;cursor:pointer;font-size:14px}
+  .hint{font-size:12px;color:var(--mut);text-align:center;margin-top:10px}
+  .done{background:#dcf2e4;border:1px solid #a6dcb8;border-radius:9px;padding:16px;text-align:center;margin-top:14px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(26px,1fr));gap:4px;margin-top:14px}
+  .cell{height:26px;border-radius:4px;background:#d7dde3;display:flex;align-items:center;justify-content:center;
+        font-size:10px;cursor:pointer;color:#556}
+  .cell.same{background:var(--same);color:#fff} .cell.diff{background:var(--diff);color:#fff}
+  .cell.uns{background:var(--uns);color:#fff} .cell.cur{outline:2px solid #111}
+</style>
+</head>
+<body>
+<header>
+  <h1>تصنيف أزواج المتون — هل هما نفس الحديث؟</h1>
+  <div class="bar">
+    <label>ملف الأزواج: <input type="file" id="file" accept=".json"></label>
+    <button id="exp" style="padding:6px 12px;border-radius:6px;border:0;background:#3a7;color:#fff;font-weight:700;cursor:pointer">⬇ تصدير النتائج</button>
+    <span class="prog" id="prog"></span>
+  </div>
+</header>
+<div id="wrap"><p style="color:#667">حمّل <code>pairs_blind.json</code> من مجلد <code>outputs/correction/expansion_study/</code> للبدء.</p></div>
+
+<script>
+let PAIRS=[], LAB={}, cur=0, KEY="hadith_pair_labels_v1";
+const $=s=>document.querySelector(s);
+const esc=s=>(s||"").replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+$("#file").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{PAIRS=JSON.parse(rd.result)}catch(x){alert("ملف غير صالح");return;}
+    LAB=JSON.parse(localStorage.getItem(KEY)||"{}"); cur=firstUnlabeled(); render(); };
+  rd.readAsText(f,"utf-8");
+});
+function firstUnlabeled(){for(let i=0;i<PAIRS.length;i++)if(!LAB[PAIRS[i].pid])return i;return 0;}
+function save(){localStorage.setItem(KEY,JSON.stringify(LAB));}
+function setLabel(v){const p=PAIRS[cur];LAB[p.pid]=v;save();render();
+  if(v&&cur<PAIRS.length-1)setTimeout(()=>{cur++;render();},160);}
+
+function render(){
+  if(!PAIRS.length){return;}
+  const p=PAIRS[cur], lab=LAB[p.pid]||"";
+  const nDone=PAIRS.filter(x=>LAB[x.pid]).length;
+  $("#prog").innerHTML=`<b>${nDone}</b> / ${PAIRS.length} مُصنَّف`;
+  let cells=PAIRS.map((x,i)=>{const l=LAB[x.pid]||"";const cls=l==="same"?"same":l==="different"?"diff":l==="unsure"?"uns":"";
+     return `<div class="cell ${cls} ${i===cur?'cur':''}" data-i="${i}" title="${x.pid}">${i+1}</div>`;}).join("");
+  $("#wrap").innerHTML=
+    `<div class="pill">الزوج ${cur+1} من ${PAIRS.length} — ${esc(p.pid)}</div>`+
+    `<div><div class="lblA">المتن الأول (أ)</div><div class="matn">${esc(p.A)}</div></div>`+
+    `<div><div class="lblB">المتن الثاني (ب)</div><div class="matn">${esc(p.B)}</div></div>`+
+    `<div class="btns">`+
+      `<button class="same ${lab==='same'?'on':''}" onclick="setLabel('same')">✓ نفس الحديث <small>(1)</small></button>`+
+      `<button class="diff ${lab==='different'?'on':''}" onclick="setLabel('different')">✕ حديث مختلف <small>(2)</small></button>`+
+      `<button class="uns ${lab==='unsure'?'on':''}" onclick="setLabel('unsure')">؟ غير متأكد <small>(3)</small></button>`+
+    `</div>`+
+    `<div class="nav"><button onclick="go(-1)">◀ السابق</button>`+
+      `<span style="color:#667;font-size:13px">${lab?('الحكم: '+({same:'نفس الحديث',different:'مختلف',unsure:'غير متأكد'}[lab])):'—'}</span>`+
+      `<button onclick="go(1)">التالي ▶</button></div>`+
+    `<div class="hint">اختصارات: 1 = نفس الحديث · 2 = مختلف · 3 = غير متأكد · ← → للتنقّل</div>`+
+    (nDone===PAIRS.length?`<div class="done">اكتمل التصنيف ✅ — اضغط «تصدير النتائج» وأرسل الملف.</div>`:``)+
+    `<div class="grid">${cells}</div>`;
+  document.querySelectorAll(".cell").forEach(c=>c.onclick=()=>{cur=+c.dataset.i;render();});
+}
+function go(d){cur=Math.max(0,Math.min(PAIRS.length-1,cur+d));render();}
+document.addEventListener("keydown",e=>{
+  if(!PAIRS.length)return;
+  if(e.key==="1")setLabel("same"); else if(e.key==="2")setLabel("different");
+  else if(e.key==="3")setLabel("unsure"); else if(e.key==="ArrowLeft")go(1); else if(e.key==="ArrowRight")go(-1);
+});
+$("#exp").addEventListener("click",()=>{
+  if(!PAIRS.length){alert("لا بيانات");return;}
+  const rows=PAIRS.map(p=>({pid:p.pid,label:LAB[p.pid]||null}));
+  const blob=new Blob([JSON.stringify(rows,null,2)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="pair_labels.json";a.click();
+});
+</script>
+</body>
+</html>

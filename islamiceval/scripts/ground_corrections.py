@@ -190,7 +190,6 @@ def _search_one(cn, ref, quran, mushaf, hadith, max_src):
         rev = [src for src, blob in docs
                if blob and len(blob) >= PARTIAL_MIN_LEN and blob in cn]
         if rev:
-            print("partial returned:", rev)
             return rev[:max_src], "contains"
     return [], None
 
@@ -293,6 +292,56 @@ def snap(cand_text, ref, snapc, threshold=SNAP_THRESHOLD, cross=True):
     return None
 
 
+_SNAP_SETSIZE_CACHE = {}
+def _hadith_setsizes(snapc):
+    """Per-hadith-doc distinct-token count (of the space-preserving _norm_words tokens
+    the inverted index is built on). Cached per snapc instance."""
+    key = id(snapc)
+    c = _SNAP_SETSIZE_CACHE.get(key)
+    if c is None:
+        docs, _ = snapc["hadith"]
+        c = [len(set(d[3])) for d in docs]
+        _SNAP_SETSIZE_CACHE[key] = c
+    return c
+
+def jaccard_snap_hadith(cand_text, snapc, threshold=None, shortlist=120):
+    """Snap a candidate to the single corpus matn with the HIGHEST content-token
+    Jaccard (frame-stripped). Returns {score, source, gold_text} if >= threshold
+    else None. Unlike char snap, a long story-hadith that merely CONTAINS the
+    candidate scores low (extra tokens dominate the union) so it is not chosen.
+
+    Shortlisting: the inverted index gives, per corpus doc, the intersection size
+    with the candidate's tokens. We exact-score the union of (a) the top `shortlist`
+    docs by APPROXIMATE Jaccard = |∩| / (|cand|+|doc|-|∩|), and (b) the top `shortlist`
+    by raw intersection count. (a) reliably surfaces a SHORT near-identical matn that
+    intersection-count alone buries under long narrations; (b) guarantees no regression
+    vs the legacy count-ranked shortlist."""
+    from hadith_similarity import jaccard          # lazy: avoids import cycle
+    th = SNAP_JAC_TH if threshold is None else threshold
+    docs, idx = snapc["hadith"]
+    cw = set(_norm_words(cand_text).split())
+    if not cw:
+        return None
+    setsz = _hadith_setsizes(snapc)
+    cnt = Counter()
+    for tok in cw:
+        for i in idx.get(tok, ()):
+            cnt[i] += 1
+    ncand = len(cw)
+    approx = sorted(cnt.items(), key=lambda kv: kv[1] / (ncand + setsz[kv[0]] - kv[1]),
+                    reverse=True)[:shortlist]
+    pool = {i for i, _ in approx} | {i for i, _ in cnt.most_common(shortlist)}
+    best = None                                    # (score, doc_index)
+    for i in pool:
+        sc = jaccard(cand_text, docs[i][1])
+        if best is None or sc > best[0]:
+            best = (sc, i)
+    if best and best[0] >= th:
+        i = best[1]
+        return {"score": round(best[0], 4), "source": docs[i][0], "gold_text": docs[i][1]}
+    return None
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # RESOLVE — the layered correction→corpus policy (used by build_corrections_excel
 # and for rollout). Quran: always resolve to the FULL ayah (text match → snap →
@@ -301,8 +350,40 @@ def snap(cand_text, ref, snapc, threshold=SNAP_THRESHOLD, cross=True):
 # eliminate. Any correction not grounded to the corpus is eliminated.
 # ─────────────────────────────────────────────────────────────────────────────
 HADITH_EXPAND = False          # module toggle (set from --hadith_expansion)
-EXPAND_TH     = 0.90           # hadith expansion similarity threshold
+EXPAND_METRIC = "jaccard"      # LOCKED config (2026-07-08): "jaccard" = frame-stripped
+                               # content-token Jaccard (blind-study winner, AUC 0.905).
+                               # "char" = legacy difflib char-ratio.
+EXPAND_TH     = 0.90           # char-ratio expansion threshold (EXPAND_METRIC="char")
+EXPAND_JAC_TH = 0.35           # Jaccard expansion threshold (EXPAND_METRIC="jaccard"). LOCKED.
+                               # 0.25 (the balanced-pair accuracy point) over-expanded at
+                               # corpus scale; 0.35 is the locked default (200-pair study).
+EXPAND_MAX    = 0              # LOCKED OFF (2026-07-08): no fixed cap. Superseded by the
+                               # EXPAND_SKIP_GE rule below (skip expansion wholesale for a
+                               # span that explodes, rather than truncating it). Set >0 to
+                               # re-enable a hard cap on distinct variants (best-overlap-first).
+EXPAND_SKIP_GE = 15            # LOCKED (2026-07-08): if an anchor expands to >= this many
+                               # distinct variants (a generic matn matching a large family,
+                               # e.g. "قال رسول الله ..."), DO NOT expand — keep ONLY the
+                               # snapped anchor. Set 0 to disable the skip.
 REF_COVER_TH  = 0.90           # Quran reference-fallback: min cand-coverage within the cited ayah
+
+# HADITH ANCHOR SELECTION — how the candidate is snapped to its corpus anchor before
+# expansion. "char" (legacy) = tier-1 exact substring (first corpus matn that CONTAINS
+# the candidate) then difflib char-ratio snap. "jaccard" = snap to the single
+# HIGHEST content-token-Jaccard corpus matn (frame-stripped), skipping the substring
+# tier. Rationale: a short candidate can be an exact substring of a LONG story-hadith
+# yet be a near-copy of a SHORT real hadith; char/substring anchors on the story (then
+# expansion radiates from it), whereas Jaccard scores the short hadith high (near-equal
+# token sets) and the long story low (many extra tokens) → correct anchor. Expansion
+# is single-hop from that anchor, so a story-hadith CONTAINING the anchor is still kept
+# as a legitimate variant — it is just never itself used as an anchor to expand from.
+SNAP_METRIC   = "jaccard"      # LOCKED config (2026-07-08): "jaccard" (anchor = best
+                               # content-Jaccard matn). "char" = legacy substring+char-ratio.
+SNAP_JAC_TH   = 0.40           # min candidate↔anchor Jaccard to snap (jaccard mode). LOCKED.
+SNAP_CHAR_FALLBACK_TH = 0.85   # LOCKED (2026-07-08): in jaccard mode, when NO corpus matn
+                               # clears SNAP_JAC_TH, FALL BACK to char-snap (exact substring,
+                               # then difflib char-ratio) at this LOWER threshold — "snap as
+                               # many as we can". Set 0 to disable the fallback (jaccard-only).
 
 def _dedup(seq):
     seen, out = set(), []
@@ -319,17 +400,23 @@ def _coverage(cand_norm, target_norm):
     sm = difflib.SequenceMatcher(None, cand_norm, target_norm, autojunk=False)
     return sum(b.size for b in sm.get_matching_blocks()) / len(cand_norm)
 
-def expand_hadith(matn, snapc, th=EXPAND_TH):
-    """Every corpus hadith (source, matn_text) whose matn is >= th ratio to, OR a
-    (normalized) substring/superstring of, `matn`. Single-hop from `matn` (no drift).
-    Returns RAW (source, text) pairs in best-overlap order — collapsing identical
-    matns across books is the caller's job (_group_variants), so alif-distinct
-    variants are NOT lost here."""
+def expand_hadith(matn, snapc, th=None):
+    """Every corpus hadith (source, matn_text) that is a variant of `matn`: a
+    (normalized) substring/superstring of it, OR similar above threshold. Similarity is
+    EXPAND_METRIC — legacy "char" (difflib char-ratio >= EXPAND_TH) or "jaccard"
+    (frame-stripped content-token Jaccard >= EXPAND_JAC_TH; the blind-study winner that
+    ignores isnad/honorific boilerplate). Single-hop from `matn` (no drift). Returns RAW
+    (source, text) pairs in best-overlap order; _group_variants does the collapse."""
     docs, idx = snapc["hadith"]
     cw = _norm_words(matn).split()
     cs = "".join(cw)
     if not cs:
         return []
+    use_jac = (EXPAND_METRIC == "jaccard")
+    jth = EXPAND_JAC_TH if use_jac else None
+    cth = th if th is not None else EXPAND_TH
+    if use_jac:
+        from hadith_similarity import jaccard      # lazy: avoids import cycle
     cnt = Counter()
     for tok in set(cw):
         for i in idx.get(tok, ()):
@@ -337,8 +424,14 @@ def expand_hadith(matn, snapc, th=EXPAND_TH):
     out = []
     for i, _ in cnt.most_common(150):
         ds = docs[i][2]
-        if ds and (cs in ds or ds in cs
-                   or difflib.SequenceMatcher(None, cs, ds, autojunk=False).ratio() >= th):
+        if not ds:
+            continue
+        if cs in ds or ds in cs:                      # substring = variant (abbrev/full,
+            out.append((docs[i][0], docs[i][1])); continue   # incl. a story containing it)
+        if use_jac:
+            if jaccard(matn, docs[i][1]) >= jth:
+                out.append((docs[i][0], docs[i][1]))
+        elif difflib.SequenceMatcher(None, cs, ds, autojunk=False).ratio() >= cth:
             out.append((docs[i][0], docs[i][1]))
     return out
 
@@ -346,7 +439,8 @@ def expand_hadith(matn, snapc, th=EXPAND_TH):
 def _group_variants(pairs):
     """[(source, matn_text), ...] -> [(matn_text, [sources]), ...]. Collapse EXACT
     (norm_dedup, alif-kept) duplicate matns across books into a single entry with
-    their sources unioned, preserving first-seen order. Distinct variants stay apart."""
+    their sources unioned, preserving first-seen order. Distinct variants stay apart.
+    Capped to EXPAND_MAX distinct variants (best-overlap-first) when EXPAND_MAX > 0."""
     by, order = {}, []
     for src, text in pairs:
         k = norm_dedup(text)
@@ -356,7 +450,28 @@ def _group_variants(pairs):
             by[k] = [text, []]; order.append(k)
         if src and src not in by[k][1]:
             by[k][1].append(src)
+    if EXPAND_MAX and EXPAND_MAX > 0:
+        order = order[:EXPAND_MAX]
     return [(by[k][0], by[k][1]) for k in order]
+
+
+def _expand_from_anchor(anchor_text, anchor_src, snapc):
+    """snap -> dedup -> expand, with the two LOCKED guarantees:
+      (1) the snapped ANCHOR is always the FIRST variant (so the correction list is
+          "snapped-first"), carrying its cross-book source union when present;
+      (2) if the anchor expands to >= EXPAND_SKIP_GE distinct variants (a generic matn
+          that matches a large family), the expansion is SKIPPED wholesale and only the
+          anchor is kept.
+    `anchor_src` is a single source string or a list of them (the anchor's fallback)."""
+    fb = [anchor_src] if isinstance(anchor_src, str) else list(anchor_src)
+    exp = _group_variants(expand_hadith(anchor_text, snapc))          # deduped variants
+    ak = norm_dedup(anchor_text)
+    anchor_row = next(((t, s) for (t, s) in exp if norm_dedup(t) == ak), (anchor_text, fb))
+    others = [(t, s) for (t, s) in exp if norm_dedup(t) != ak]
+    variants = [anchor_row] + others                                  # anchor guaranteed first
+    if EXPAND_SKIP_GE and len(variants) >= EXPAND_SKIP_GE:
+        return [anchor_row]                                           # explode -> anchor only
+    return variants
 
 def _resolve_quran(cand_text, cn, claimed_source, quran, mushaf, hadith, snapc):
     # tier 1: text match (substring / multi-ayah) -> snap to the FULL ayah(s)
@@ -378,28 +493,52 @@ def _resolve_quran(cand_text, cn, claimed_source, quran, mushaf, hadith, snapc):
                 return {"status": "ref", "gold_text": mushaf.raw_of(src), "sources": [src], "matched_ref": "quran"}
     return {"status": "eliminated", "gold_text": None, "sources": [], "matched_ref": None}
 
-def _resolve_hadith(cand_text, cn, quran, mushaf, hadith, snapc):
+def _resolve_hadith_char(cand_text, cn, quran, mushaf, hadith, snapc, snap_th):
+    """Legacy char anchoring: tier 1 = exact substring (candidate ⊂ a corpus matn),
+    tier 2 = difflib char-ratio snap >= `snap_th`. The matched matn is the anchor for
+    expansion. Returns eliminated if neither tier fires."""
     # tier 1: exact substring -> the matched corpus matn is the anchor for expansion
     srcs, _ = _search_one(cn, "hadith", quran, mushaf, hadith, 5)
     if srcs:
         if HADITH_EXPAND:
             anchor = snapc["hadith_raw"].get(srcs[0], cand_text)   # full canonical matn
-            variants = _group_variants(expand_hadith(anchor, snapc)) or [(anchor, list(srcs))]
+            variants = _expand_from_anchor(anchor, list(srcs), snapc)
             return {"status": "grounded", "gold_text": variants[0][0], "sources": variants[0][1],
                     "variants": variants, "matched_ref": "hadith"}
         return {"status": "grounded", "gold_text": cand_text, "sources": _dedup(srcs),
                 "variants": [(cand_text, _dedup(srcs))], "matched_ref": "hadith"}
-    # tier 2: >=90% snap -> the corpus matn is the anchor for expansion
-    sn = snap(cand_text, "hadith", snapc, SNAP_THRESHOLD, cross=False)
+    # tier 2: char-ratio snap (>= snap_th) -> the corpus matn is the anchor for expansion
+    sn = snap(cand_text, "hadith", snapc, snap_th, cross=False)
     if sn:
         if HADITH_EXPAND:
-            variants = _group_variants(expand_hadith(sn["gold_text"], snapc)) \
-                       or [(sn["gold_text"], [sn["source"]])]
+            variants = _expand_from_anchor(sn["gold_text"], sn["source"], snapc)
             return {"status": "snapped", "gold_text": variants[0][0], "sources": variants[0][1],
                     "variants": variants, "matched_ref": "hadith"}
         return {"status": "snapped", "gold_text": sn["gold_text"], "sources": [sn["source"]],
                 "variants": [(sn["gold_text"], [sn["source"]])], "matched_ref": "hadith"}
     return {"status": "eliminated", "gold_text": None, "sources": [], "variants": [], "matched_ref": None}
+
+def _resolve_hadith(cand_text, cn, quran, mushaf, hadith, snapc):
+    # jaccard-snap mode (LOCKED): PRIMARY = single best content-Jaccard anchor (>= SNAP_JAC_TH),
+    # expand ONLY from it (correctly anchors on a SHORT real hadith, not a long story that
+    # merely contains the candidate). FALLBACK = char-snap at the lower SNAP_CHAR_FALLBACK_TH
+    # (exact substring, then char-ratio) so a candidate that is an exact substring of a long
+    # matn — jaccard-low but genuinely grounded — is still snapped. "Snap as many as we can."
+    if SNAP_METRIC == "jaccard":
+        an = jaccard_snap_hadith(cand_text, snapc)
+        if an:
+            if HADITH_EXPAND:
+                variants = _expand_from_anchor(an["gold_text"], an["source"], snapc)
+            else:
+                variants = [(an["gold_text"], [an["source"]])]
+            return {"status": "snapped", "gold_text": variants[0][0], "sources": variants[0][1],
+                    "variants": variants, "matched_ref": "hadith"}
+        if SNAP_CHAR_FALLBACK_TH and SNAP_CHAR_FALLBACK_TH > 0:
+            return _resolve_hadith_char(cand_text, cn, quran, mushaf, hadith, snapc,
+                                        SNAP_CHAR_FALLBACK_TH)
+        return {"status": "eliminated", "gold_text": None, "sources": [], "variants": [], "matched_ref": None}
+    # legacy char mode
+    return _resolve_hadith_char(cand_text, cn, quran, mushaf, hadith, snapc, SNAP_THRESHOLD)
 
 def resolve_correction(cand_text, ref, claimed_source, quran, mushaf, hadith, snapc):
     """Resolve one model correction to corpus gold. Returns

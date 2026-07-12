@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>IslamicEval2026 — عارض تصحيحات RELEASE</title>
+<style>
+  :root{--inc:#c0392b;--cor:#1e8449;--src:#2471a3;--isn:#7d3c98;--bg:#f4f6f8;--card:#fff;--mut:#667;}
+  *{box-sizing:border-box}
+  body{font-family:"Segoe UI",Tahoma,Arial,sans-serif;margin:0;background:var(--bg);color:#1a1a1a;font-size:15px}
+  header{position:sticky;top:0;z-index:10;background:#1f2d3d;color:#fff;padding:10px 16px;box-shadow:0 2px 6px rgba(0,0,0,.2)}
+  header h1{margin:0 0 8px;font-size:17px}
+  .bar{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;font-size:13px}
+  .bar label{display:flex;gap:5px;align-items:center;cursor:pointer;white-space:nowrap}
+  .bar input[type=text]{padding:5px 8px;border-radius:5px;border:1px solid #556;min-width:220px;font-size:13px}
+  .bar input[type=file]{font-size:12px;color:#cdd}
+  .stats{background:#28394d;color:#dfe7ef;padding:7px 16px;font-size:12.5px;display:flex;flex-wrap:wrap;gap:6px 18px}
+  .stats b{color:#fff}
+  .warn{color:#ffcf7a}
+  #list{padding:14px;max-width:1080px;margin:0 auto}
+  .resp{background:var(--card);border-radius:9px;padding:14px 16px;margin-bottom:16px;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+  .resp h2{font-size:14px;margin:0 0 4px;color:var(--mut);font-weight:600}
+  .q{font-weight:600;margin:2px 0 10px;font-size:15.5px}
+  .answer{white-space:pre-wrap;line-height:2.05;background:#fbfcfd;border:1px solid #e6eaef;border-radius:7px;
+          padding:12px 14px;margin-bottom:12px;max-height:340px;overflow:auto}
+  mark{border-radius:4px;padding:1px 3px;cursor:pointer;font-weight:600;position:relative}
+  mark.inc{background:#f9d7d2;color:var(--inc);outline:1px solid #e6a89f}
+  mark.cor{background:#d5f0df;color:var(--cor);outline:1px solid #a6dcb8}
+  mark.src{background:#d6e8f6;color:var(--src)}
+  mark.isn{background:#ece0f2;color:var(--isn)}
+  mark .bdg{font-size:9px;vertical-align:super;opacity:.75;margin-inline-start:2px}
+  mark.hl{box-shadow:0 0 0 2px #f1c40f}
+  .anns{display:flex;flex-direction:column;gap:9px}
+  .ann{border:1px solid #e2e7ee;border-radius:7px;padding:9px 11px;background:#fdfefe}
+  .ann.tgt{border-inline-start:4px solid var(--inc)}
+  .ann.ok{border-inline-start:4px solid var(--cor)}
+  .ann .top{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;font-size:12.5px;color:var(--mut);margin-bottom:5px}
+  .tag{font-size:11px;padding:1px 7px;border-radius:20px;font-weight:700}
+  .tag.inc{background:#fbe3df;color:var(--inc)} .tag.cor{background:#dcf2e4;color:var(--cor)}
+  .tag.ref{background:#e7eef6;color:var(--src)}
+  .span-txt{background:#fff6f4;border:1px dashed #e6b6ac;border-radius:5px;padding:5px 8px;margin:3px 0;font-size:14px}
+  .corr{margin-top:6px}
+  .corr .h{font-size:12px;color:var(--mut);margin-bottom:3px}
+  .cbox{background:#eefaf1;border:1px solid #bfe6ca;border-radius:5px;padding:5px 8px;margin:3px 0;font-size:14px;line-height:1.9}
+  .cbox .srcs{display:block;font-size:11px;color:var(--src);margin-top:2px}
+  .khata{display:inline-block;background:#fbe3df;color:var(--inc);font-weight:700;padding:3px 12px;border-radius:6px}
+  .rat{font-size:12px;color:#555;background:#f6f7f9;border-radius:5px;padding:5px 8px;margin-top:5px;border:1px solid #e6eaef}
+  .flag{background:#fff3d6;border:1px solid #f0d089;color:#8a6d1e;border-radius:5px;padding:4px 8px;font-size:12px;margin-top:6px}
+  .legend{font-size:12px;color:var(--mut);display:flex;gap:14px;flex-wrap:wrap;margin-top:4px}
+  .legend span{display:inline-flex;align-items:center;gap:4px}
+  .sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+  .empty{color:var(--mut);text-align:center;padding:40px;font-size:15px}
+  .pager{display:flex;gap:8px;align-items:center;justify-content:center;padding:10px}
+  .pager button{padding:5px 12px;border-radius:5px;border:1px solid #bbc;background:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <h1>عارض تصحيحات IslamicEval2026 — فحص الجودة</h1>
+  <div class="bar">
+    <label>ملف JSONL: <input type="file" id="fjsonl" accept=".jsonl,.json"></label>
+    <label>ملف التدقيق (اختياري): <input type="file" id="faudit" accept=".json"></label>
+    <input type="text" id="search" placeholder="بحث في السؤال / النص / المصدر…">
+    <label><input type="checkbox" id="fTargets" checked> التصحيحات فقط</label>
+    <label><input type="checkbox" id="fKhata"> خطأ فقط</label>
+    <label><input type="checkbox" id="fGrounded"> المُسنَدة فقط</label>
+    <label><input type="checkbox" id="fFlags"> التنبيهات فقط</label>
+    <label>المرجع:
+      <select id="fRef"><option value="">الكل</option><option value="quran">قرآن</option><option value="hadith">حديث</option></select>
+    </label>
+  </div>
+  <div class="legend">
+    <span><i class="sw" style="background:#f9d7d2"></i> نص غير صحيح</span>
+    <span><i class="sw" style="background:#d5f0df"></i> نص صحيح</span>
+    <span><i class="sw" style="background:#d6e8f6"></i> المصدر المذكور</span>
+    <span><i class="sw" style="background:#ece0f2"></i> إسناد</span>
+  </div>
+</header>
+<div class="stats" id="stats">حمّل ملف <code>dev.jsonl</code> (أو train/test) من مجلد <code>_corrected</code>.</div>
+<div id="list"><div class="empty">لا يوجد ملف محمّل بعد.</div></div>
+<div class="pager" id="pager"></div>
+
+<script>
+const PAGE=25;
+let RESP=[], AUDIT={}, SPLIT="", page=0;
+const $=s=>document.querySelector(s);
+const esc=s=>(s||"").replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const CONTENT={Ayah:"quran",matn:"hadith"};
+
+function inferSplit(name){const b=(name||"").toLowerCase();for(const s of["train","dev","test"])if(b.includes(s))return s;return "";}
+
+$("#fjsonl").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f)return; SPLIT=inferSplit(f.name);
+  const rd=new FileReader();
+  rd.onload=()=>{
+    const parsed=rd.result.split(/\r?\n/).filter(l=>l.trim()).map(l=>{try{return JSON.parse(l)}catch(x){return null}}).filter(Boolean);
+    const looksRelease=parsed.some(o=>o&&Array.isArray(o.annotations)&&"generated_answer"in o);
+    if(parsed.length&&!looksRelease){
+      RESP=[]; page=0; render();
+      $("#stats").innerHTML=`<b class="warn">هذا ليس ملف RELEASE.</b> يبدو أنه مخرجات GPT الخام `+
+        `(<code>{custom_id, response…}</code>). حمّل الملف المُصحَّح: `+
+        `<code>data/islamiceval2026_RELEASE_corrected/dev.jsonl</code>`;
+      $("#list").innerHTML='<div class="empty">الملف بصيغة غير متوقعة — المطلوب ملف jsonl المُصحَّح (يحتوي annotations + generated_answer).</div>';
+      return;
+    }
+    RESP=parsed; page=0; render();
+  };
+  rd.readAsText(f,"utf-8");
+});
+$("#faudit").addEventListener("change",e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader(); rd.onload=()=>{ try{AUDIT=JSON.parse(rd.result)}catch(x){AUDIT={}} render(); }; rd.readAsText(f,"utf-8");
+});
+["search","fTargets","fKhata","fGrounded","fFlags","fRef"].forEach(id=>{
+  const el=$("#"+id); el.addEventListener(id==="search"?"input":"change",()=>{page=0;render();});
+});
+
+// ---- health checks per annotation ----
+function annFlags(r,a){
+  const out=[]; const ans=r.generated_answer||"";
+  const cs=(a.segments||[]).find(s=>CONTENT[s.type]);
+  const c=a.correction;
+  const hasCorr = c!==undefined && c!==null;
+  if(hasCorr && cs && cs.label!=="incorrect") out.push("تصحيح على مقطع غير مُعلَّم «incorrect»");
+  for(const s of (a.segments||[])){
+    if(!(Number.isInteger(s.span_start)&&Number.isInteger(s.span_end))) out.push("إزاحة مقطع غير صالحة");
+    else if(s.span_start<0||s.span_end>ans.length||s.span_start>=s.span_end) out.push("إزاحة خارج حدود النص");
+  }
+  if(Array.isArray(c)){
+    if(c.length===0) out.push("قائمة تصحيح فارغة");
+    if(c.length>10) out.push("عدد التصحيحات > 10 (توسّع مفرط)");
+    if(c.some(t=>!t||!t.trim())) out.push("نص تصحيح فارغ");
+  }
+  return out;
+}
+
+// ---- build highlighted answer ----
+function highlight(r){
+  const ans=r.generated_answer||""; const segs=[];
+  (r.annotations||[]).forEach(a=>{
+    (a.segments||[]).forEach(s=>{
+      if(Number.isInteger(s.span_start)&&Number.isInteger(s.span_end)&&s.span_start<s.span_end&&s.span_end<=ans.length){
+        let cls = s.type==="claimed_source"?"src": s.type==="isnad"?"isn": (s.label==="incorrect"?"inc":s.label==="correct"?"cor":"src");
+        segs.push({a:s.span_start,b:s.span_end,cls,aid:a.annotation_id,type:s.type});
+      }
+    });
+  });
+  segs.sort((x,y)=>x.a-y.a||x.b-y.b);
+  let html="",pos=0;
+  for(const s of segs){
+    if(s.a<pos){continue;} // skip overlaps
+    html+=esc(ans.slice(pos,s.a));
+    const badge = CONTENT[s.type]?`<span class="bdg">#${s.aid}</span>`:"";
+    html+=`<mark class="${s.cls}" data-aid="${s.aid}" title="${s.type} • #${s.aid}">${esc(ans.slice(s.a,s.b))}${badge}</mark>`;
+    pos=s.b;
+  }
+  html+=esc(ans.slice(pos));
+  return html;
+}
+
+function annCard(r,a){
+  const ans=r.generated_answer||"";
+  const cs=(a.segments||[]).find(s=>CONTENT[s.type]);
+  const src=(a.segments||[]).find(s=>s.type==="claimed_source");
+  const ref=cs?CONTENT[cs.type]:"";
+  const c=a.correction, hasCorr=c!==undefined&&c!==null;
+  const isTgt = cs && cs.label==="incorrect";
+  const spanTxt = cs?ans.slice(cs.span_start,cs.span_end):"";
+  const srcTxt = src?ans.slice(src.span_start,src.span_end):"";
+  const aud = AUDIT[`${SPLIT}:${r.id}:a${a.annotation_id}`];
+  let h=`<div class="ann ${isTgt?'tgt':'ok'}" data-aid="${a.annotation_id}">`;
+  h+=`<div class="top"><b>#${a.annotation_id}</b> <span class="tag ${ref==='quran'?'ref':'ref'}">${a.label||''}</span>`;
+  if(cs) h+=`<span class="tag ${cs.label==='incorrect'?'inc':'cor'}">${cs.type}: ${cs.label}</span>`;
+  if(srcTxt) h+=`<span>المصدر المذكور: <b style="color:var(--src)">${esc(srcTxt)}</b></span>`;
+  h+=`</div>`;
+  if(spanTxt) h+=`<div class="span-txt">${esc(spanTxt)}</div>`;
+  if(hasCorr){
+    if(Array.isArray(c)){
+      h+=`<div class="corr"><div class="h">التصحيحات المُسنَدة (${c.length}):</div>`;
+      c.forEach((t,i)=>{
+        let srcs="";
+        if(aud&&aud.corrections&&aud.corrections[i]&&aud.corrections[i].sources)
+          srcs=`<span class="srcs">${esc((aud.corrections[i].sources||[]).join(" ؛ "))} <em>[${aud.corrections[i].status||''}]</em></span>`;
+        h+=`<div class="cbox">${esc(t)}${srcs}</div>`;
+      });
+      h+=`</div>`;
+    } else {
+      h+=`<div class="corr"><span class="khata">${esc(c)}</span></div>`;
+    }
+  }
+  if(aud){
+    if(aud.verdict||aud.rationale){
+      h+=`<div class="rat"><b>حكم النموذج:</b> ${esc(aud.verdict||"?")}`;
+      if(aud.rationale) h+=`<br><b>التبرير:</b> ${esc(aud.rationale)}`;
+      h+=`</div>`;
+    }
+    if(Array.isArray(aud.raw_candidates)&&aud.raw_candidates.length){
+      h+=`<div class="rat"><b>مقترحات النموذج الخام (${aud.raw_candidates.length}):</b>`;
+      aud.raw_candidates.forEach(rc=>{
+        h+=`<div style="margin-top:3px">• <b>${esc(rc.source||"")}</b> `+
+           `<span style="color:#888">[${esc(rc.confidence||"")}]</span><br>`+
+           `<span style="color:#334">${esc(rc.text||"")}</span>`+
+           (rc.matched_run?`<br><span style="color:#777;font-size:11px">تطابق: ${esc(rc.matched_run)}</span>`:``)+
+           `</div>`;
+      });
+      h+=`</div>`;
+    }
+  }
+  const fl=annFlags(r,a);
+  if(fl.length) h+=`<div class="flag">⚠ ${fl.map(esc).join(" • ")}</div>`;
+  h+=`</div>`;
+  return h;
+}
+
+function matchResp(r){
+  const q=$("#search").value.trim();
+  const ref=$("#fRef").value;
+  const anns=r.annotations||[];
+  const hasTargetCorr=a=>{const cs=(a.segments||[]).find(s=>CONTENT[s.type]);return a.correction!==undefined&&a.correction!==null;};
+  let ok=anns.some(a=>{
+    const cs=(a.segments||[]).find(s=>CONTENT[s.type]);
+    const c=a.correction; const corr=c!==undefined&&c!==null;
+    if(ref && (!cs||CONTENT[cs.type]!==ref)) return false;
+    if($("#fTargets").checked && !corr) return false;
+    if($("#fKhata").checked && c!=="خطأ") return false;
+    if($("#fGrounded").checked && !Array.isArray(c)) return false;
+    if($("#fFlags").checked && annFlags(r,a).length===0) return false;
+    return true;
+  });
+  if(!ok) return false;
+  if(q){
+    const hay=(r.question||"")+" "+(r.generated_answer||"")+" "+r.id;
+    if(!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+function computeStats(){
+  let resp=RESP.length,anns=0,tgt=0,grounded=0,khata=0,unset=0,maxc=0,flags=0,varTotal=0;
+  RESP.forEach(r=>(r.annotations||[]).forEach(a=>{
+    anns++;
+    const cs=(a.segments||[]).find(s=>CONTENT[s.type]);
+    if(cs&&cs.label==="incorrect")tgt++;
+    const c=a.correction;
+    if(c===undefined||c===null){ if(cs&&cs.label==="incorrect")unset++; }
+    else if(Array.isArray(c)){grounded++;maxc=Math.max(maxc,c.length);varTotal+=c.length;}
+    else khata++;
+    if(annFlags(r,a).length)flags++;
+  }));
+  return {resp,anns,tgt,grounded,khata,unset,maxc,flags,avg:grounded?(varTotal/grounded).toFixed(2):0};
+}
+
+function render(){
+  if(!RESP.length){$("#list").innerHTML='<div class="empty">لا يوجد ملف محمّل بعد.</div>';$("#pager").innerHTML="";return;}
+  const s=computeStats();
+  $("#stats").innerHTML=
+    `الملف: <b>${SPLIT||"?"}</b> • ردود: <b>${s.resp}</b> • تعليقات: <b>${s.anns}</b> • أهداف (incorrect): <b>${s.tgt}</b>`+
+    ` • مُسنَدة: <b>${s.grounded}</b> • خطأ: <b>${s.khata}</b>`+
+    ` • غير مُعيَّنة: <b class="${s.unset?'warn':''}">${s.unset}</b>`+
+    ` • أقصى عدد تصحيحات: <b class="${s.maxc>10?'warn':''}">${s.maxc}</b> • متوسط: <b>${s.avg}</b>`+
+    ` • تنبيهات: <b class="${s.flags?'warn':''}">${s.flags}</b>`+
+    (Object.keys(AUDIT).length?` • <span style="color:#8fd">التدقيق محمّل</span>`:``);
+
+  const filtered=RESP.filter(matchResp);
+  const pages=Math.max(1,Math.ceil(filtered.length/PAGE));
+  page=Math.min(page,pages-1);
+  const slice=filtered.slice(page*PAGE,page*PAGE+PAGE);
+  $("#list").innerHTML = slice.length? slice.map(r=>{
+    const anns=(r.annotations||[]).map(a=>annCard(r,a)).join("");
+    return `<div class="resp"><h2>${r.id} • ${r.question_id||""}</h2>`+
+           `<div class="q">${esc(r.question||"")}</div>`+
+           `<div class="answer">${highlight(r)}</div>`+
+           `<div class="anns">${anns}</div></div>`;
+  }).join("") : '<div class="empty">لا نتائج للمرشّحات الحالية.</div>';
+
+  $("#pager").innerHTML = pages>1?
+    `<button ${page===0?'disabled':''} id="prev">◀ السابق</button>`+
+    `<span>صفحة ${page+1} / ${pages} (${filtered.length} رد)</span>`+
+    `<button ${page>=pages-1?'disabled':''} id="next">التالي ▶</button>` : `${filtered.length} رد`;
+  if($("#prev"))$("#prev").onclick=()=>{page--;render();window.scrollTo(0,0);};
+  if($("#next"))$("#next").onclick=()=>{page++;render();window.scrollTo(0,0);};
+
+  // click a highlighted span -> flash its annotation card
+  document.querySelectorAll("mark[data-aid]").forEach(m=>m.onclick=()=>{
+    const card=m.closest(".resp").querySelector(`.ann[data-aid="${m.dataset.aid}"]`);
+    if(card){card.scrollIntoView({behavior:"smooth",block:"center"});card.style.transition="background .3s";card.style.background="#fff7d6";setTimeout(()=>card.style.background="",900);}
+  });
+}
+</script>
+</body>
+</html>

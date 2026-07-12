@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<title>IslamicEval — train_complete correction viewer</title>
+<style>
+  :root{--bg:#0f1720;--card:#17212b;--mut:#8aa0b2;--fg:#e6edf3;--ok:#2ea043;--bad:#e5534b;
+        --incorr:#3a1c1c;--corr:#14351d;--acc:#3fb0e6;--flag:#e3b341;--chip:#22303c;}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:"Segoe UI",Tahoma,Arial,sans-serif;background:var(--bg);color:var(--fg);font-size:15px}
+  header{position:sticky;top:0;z-index:10;background:#0b1219;border-bottom:1px solid #223;padding:10px 16px}
+  h1{font-size:16px;margin:0 0 8px}
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .row>*{flex:none}
+  input[type=text],select{background:#0b1219;color:var(--fg);border:1px solid #2a3a48;border-radius:6px;padding:6px 8px;font-size:14px}
+  input[type=text]{min-width:230px}
+  button{background:var(--chip);color:var(--fg);border:1px solid #2a3a48;border-radius:6px;padding:6px 10px;cursor:pointer}
+  button:hover{background:#2b3a48}
+  label.file{background:var(--acc);color:#04222f;font-weight:600;padding:6px 10px;border-radius:6px;cursor:pointer}
+  label.file input{display:none}
+  .muted{color:var(--mut)}
+  .stats{font-size:13px;color:var(--mut);margin-top:8px;line-height:1.7}
+  .stats b{color:var(--fg)}
+  .wrap{max-width:1050px;margin:14px auto;padding:0 14px}
+  .card{background:var(--card);border:1px solid #223;border-radius:10px;padding:14px 16px;margin:0 0 14px}
+  .qid{font-size:12px;color:var(--mut)}
+  .q{font-weight:600;margin:2px 0 10px;color:#cfe3f2}
+  .ans{line-height:2.05;white-space:pre-wrap;background:#0d151d;border:1px solid #1d2a36;border-radius:8px;padding:12px}
+  mark{padding:1px 2px;border-radius:4px;font-weight:600}
+  mark.correct{background:#14351d;color:#8ce39a;border:1px solid #1c5a2e}
+  mark.incorrect{background:#4a1d1d;color:#ff9f97;border:1px solid #7a2a2a}
+  mark.claimed{background:#2a2f14;color:#e4da8a;border:1px dashed #5a5a2a}
+  mark.flag{outline:2px solid var(--flag)}
+  .ann{border:1px solid #223;border-radius:8px;padding:10px 12px;margin:10px 0 0;background:#0d151d}
+  .ann.incorrect{border-right:4px solid var(--bad)}
+  .ann.correct{border-right:4px solid var(--ok)}
+  .tag{display:inline-block;font-size:11px;padding:1px 7px;border-radius:10px;background:var(--chip);color:var(--mut);margin-inline-start:6px}
+  .tag.q{background:#123}
+  .tag.kh{background:#4a1d1d;color:#ff9f97}
+  .tag.gr{background:#14351d;color:#8ce39a}
+  .tag.fl{background:#3a3113;color:var(--flag)}
+  .span{color:#ff9f97;font-weight:600}
+  .corr{margin:6px 0 0;padding:8px 10px;background:#0f1e14;border:1px solid #1c5a2e;border-radius:6px}
+  .corr .src{font-size:12px;color:#7fd696}
+  .corr.k{background:#1e1010;border-color:#7a2a2a}
+  .corr ol{margin:4px 0 0;padding-inline-start:22px}
+  .corr li{margin:3px 0}
+  .rat{font-size:12.5px;color:var(--mut);margin-top:6px;border-top:1px dashed #223;padding-top:6px}
+  .pager{display:flex;gap:8px;align-items:center;justify-content:center;margin:16px 0 30px}
+  .empty{color:var(--mut);text-align:center;padding:40px}
+  .fid{font-size:11px;padding:1px 6px;border-radius:8px}
+  .fid.hi{background:#14351d;color:#8ce39a}.fid.mid{background:#3a3113;color:#e3b341}.fid.lo{background:#4a1d1d;color:#ff9f97}
+</style>
+</head>
+<body>
+<header>
+  <h1>IslamicEval 2026 — <span class="muted">train_complete correction viewer</span></h1>
+  <div class="row">
+    <label class="file">📂 train_complete.jsonl<input type="file" id="fJsonl" accept=".jsonl,.json"></label>
+    <label class="file" style="background:#5a6b7a;color:#fff">＋ snapped audit (sources)<input type="file" id="fSnap" accept=".jsonl"></label>
+    <label class="file" style="background:#8a7320;color:#fff">＋ flags.json<input type="file" id="fFlags" accept=".json"></label>
+    <input type="text" id="q" placeholder="بحث في السؤال/الإجابة/التصحيح أو R-id">
+    <select id="fType"><option value="">النوع: الكل</option><option value="quran">قرآن</option><option value="hadith">حديث</option></select>
+    <select id="fStat"><option value="">الحالة: الكل</option><option value="grounded">مُصحَّح (grounded)</option><option value="khata">خطأ</option><option value="correct">صحيح أصلاً</option></select>
+    <select id="fFlag"><option value="">التنبيهات: الكل</option><option value="low_fidelity">تطابق ضعيف</option><option value="cross_ref">مصدر مختلف النوع</option><option value="weak_expansion">توسعة ضعيفة</option></select>
+    <button id="btnClear">مسح الفلاتر</button>
+  </div>
+  <div class="stats" id="stats">حمّل <b>train_complete.jsonl</b> للبدء. (اختياريًا أضف snapped audit لعرض مصادر المتون، وflags.json لتمييز الحالات للمراجعة.)</div>
+</header>
+
+<div class="wrap">
+  <div id="list"></div>
+  <div class="pager" id="pagerBot"></div>
+</div>
+
+<script>
+const KHATA="خطأ", PAGE=25;
+let RESP=[], SNAP={}, FLAGS={low_fidelity:{},cross_ref:{},weak_expansion:{}}, VIEW=[], page=0;
+const CT={Ayah:"quran",matn:"hadith"};
+const $=id=>document.getElementById(id);
+const esc=s=>(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+function contentSeg(a){return (a.segments||[]).find(s=>CT[s.type]);}
+function isIncorrect(a){const c=contentSeg(a);return c&&c.label==="incorrect";}
+function flagsFor(id){const f=[];for(const k in FLAGS)if(FLAGS[k][id])f.push(k);return f;}
+
+function parseJsonl(txt){const out=[];for(const l of txt.split(/\r?\n/)){const s=l.trim();if(s)try{out.push(JSON.parse(s))}catch(e){}}return out;}
+
+$("fJsonl").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{RESP=parseJsonl(r.result);buildView();};r.readAsText(f,"utf-8");};
+$("fSnap").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{SNAP={};for(const o of parseJsonl(r.result))SNAP[o.response_id+":a"+o.annotation_id]=o;render();};r.readAsText(f,"utf-8");};
+$("fFlags").onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();
+  r.onload=()=>{const j=JSON.parse(r.result);FLAGS={low_fidelity:{},cross_ref:{},weak_expansion:{}};
+    for(const k in FLAGS)(j[k]||[]).forEach(x=>FLAGS[k][x.id]= x);buildView();};r.readAsText(f,"utf-8");};
+
+["q","fType","fStat","fFlag"].forEach(id=>$(id).addEventListener("input",()=>{page=0;buildView();}));
+$("btnClear").onclick=()=>{$("q").value="";$("fType").value="";$("fStat").value="";$("fFlag").value="";page=0;buildView();};
+
+function matchResp(r){
+  const q=$("q").value.trim().toLowerCase(), ty=$("fType").value, st=$("fStat").value, fl=$("fFlag").value;
+  // a response passes if it has at least one annotation matching the type/status/flag filters
+  let annOK=false;
+  for(const a of (r.annotations||[])){
+    const cs=contentSeg(a); if(!cs) continue;
+    const ref=CT[cs.type]; const id=r.id+":a"+a.annotation_id;
+    if(ty&&ref!==ty) continue;
+    let statusOK=true;
+    if(st==="grounded") statusOK=isIncorrect(a)&&Array.isArray(a.correction);
+    else if(st==="khata") statusOK=isIncorrect(a)&&a.correction===KHATA;
+    else if(st==="correct") statusOK=cs.label==="correct";
+    if(!statusOK) continue;
+    if(fl&&!FLAGS[fl][id]) continue;
+    annOK=true; break;
+  }
+  if(!annOK) return false;
+  if(q){
+    const hay=(r.id+" "+r.question+" "+r.generated_answer+" "+
+      (r.annotations||[]).map(a=>Array.isArray(a.correction)?a.correction.join(" "):"").join(" ")).toLowerCase();
+    if(!hay.includes(q)) return false;
+  }
+  return true;
+}
+
+function buildView(){VIEW=RESP.filter(matchResp);render();updateStats();}
+
+function highlightAnswer(r){
+  const ans=r.generated_answer||""; const marks=[];
+  for(const a of (r.annotations||[])){
+    for(const s of (a.segments||[])){
+      if(!Number.isInteger(s.span_start)||!Number.isInteger(s.span_end))continue;
+      let cls = s.type==="claimed_source" ? "claimed" : (CT[s.type]? (s.label||"") : "");
+      if(!cls) continue;
+      const flagged = CT[s.type] && s.label==="incorrect" && flagsFor(r.id+":a"+a.annotation_id).length;
+      marks.push({a:s.span_start,b:s.span_end,cls,flag:!!flagged});
+    }
+  }
+  marks.sort((x,y)=>x.a-y.a||y.b-x.b);
+  let out="",pos=0;
+  for(const m of marks){
+    if(m.a<pos)continue;                 // skip overlaps
+    out+=esc(ans.slice(pos,m.a));
+    out+=`<mark class="${m.cls}${m.flag?' flag':''}">`+esc(ans.slice(m.a,m.b))+`</mark>`;
+    pos=m.b;
+  }
+  out+=esc(ans.slice(pos));
+  return out;
+}
+
+function fidBadge(id){const f=FLAGS.low_fidelity[id];if(!f)return "";
+  const c=f.containment; const cl=c>=0.6?"hi":c>=0.3?"mid":"lo";
+  return `<span class="fid ${cl}">تطابق ${c}</span>`;}
+
+function annBlock(r,a){
+  const cs=contentSeg(a); if(!cs) return "";
+  const ref=CT[cs.type], id=r.id+":a"+a.annotation_id;
+  const span=(r.generated_answer||"").slice(cs.span_start,cs.span_end);
+  const fl=flagsFor(id);
+  if(cs.label==="correct"){
+    return `<div class="ann correct"><span class="tag q">${ref}</span> <span class="tag gr">صحيح أصلاً</span>
+      <div class="span" style="color:#8ce39a">${esc(span)}</div></div>`;
+  }
+  if(!isIncorrect(a)) return "";
+  const snap=SNAP[id]; const c=a.correction;
+  let body="";
+  if(c===KHATA){
+    body=`<div class="corr k"><b>خطأ</b> — لا يوجد تصحيح مُسنَد`+
+      (snap&&snap.grounding&&snap.grounding.length?``:``)+`</div>`;
+  }else if(Array.isArray(c)){
+    const srcs = snap&&snap.grounding ? snap.grounding : [];
+    const items=c.map((t,i)=>{
+      const g=srcs[i]; const src=g&&g.sources?` <span class="src">— ${esc(g.sources.join(" · "))}${g.status?" ["+g.status+"]":""}</span>`:"";
+      return `<li>${esc(t)}${src}</li>`;}).join("");
+    body=`<div class="corr"><ol>${items}</ol></div>`;
+  }
+  const tags=[`<span class="tag q">${ref}</span>`,
+    c===KHATA?`<span class="tag kh">خطأ</span>`:`<span class="tag gr">مُصحَّح · ${c.length}</span>`,
+    fidBadge(id)]
+    .concat(fl.map(f=>`<span class="tag fl">⚑ ${f}</span>`)).join(" ");
+  const rat = snap&&snap.rationale ? `<div class="rat">${esc(snap.rationale)}</div>`:"";
+  return `<div class="ann incorrect">${tags}
+    <div class="span">${esc(span)}</div>${body}${rat}</div>`;
+}
+
+function render(){
+  const list=$("list");
+  if(!RESP.length){list.innerHTML=`<div class="empty">— حمّل ملف train_complete.jsonl —</div>`;$("pagerBot").innerHTML="";return;}
+  const total=VIEW.length, pages=Math.max(1,Math.ceil(total/PAGE));
+  page=Math.min(page,pages-1);
+  const slice=VIEW.slice(page*PAGE,page*PAGE+PAGE);
+  list.innerHTML = slice.map(r=>{
+    const anns=(r.annotations||[]).map(a=>annBlock(r,a)).filter(Boolean).join("");
+    return `<div class="card"><div class="qid">${esc(r.id)} · ${esc(r.question_id||"")}</div>
+      <div class="q">${esc(r.question||"")}</div>
+      <div class="ans">${highlightAnswer(r)}</div>${anns}</div>`;
+  }).join("") || `<div class="empty">لا نتائج للفلاتر الحالية.</div>`;
+  const pg=`<button ${page<=0?"disabled":""} id="prev">‹ السابق</button>
+    <span class="muted">صفحة ${page+1} / ${pages} — ${total} استجابة</span>
+    <button ${page>=pages-1?"disabled":""} id="next">التالي ›</button>`;
+  $("pagerBot").innerHTML=pg;
+  if($("prev"))$("prev").onclick=()=>{page--;render();window.scrollTo(0,0);};
+  if($("next"))$("next").onclick=()=>{page++;render();window.scrollTo(0,0);};
+}
+
+function updateStats(){
+  let inc=0,gr=0,kh=0,cor=0,q=0,h=0;
+  for(const r of RESP)for(const a of (r.annotations||[])){
+    const cs=contentSeg(a);if(!cs)continue;
+    if(cs.label==="correct")cor++;
+    if(isIncorrect(a)){inc++;if(a.correction===KHATA)kh++;else if(Array.isArray(a.correction))gr++;
+      if(CT[cs.type]==="quran")q++;else h++;}
+  }
+  const fc=Object.values(FLAGS).reduce((s,o)=>s+Object.keys(o).length,0);
+  $("stats").innerHTML=`<b>${RESP.length}</b> استجابة · <b>${inc}</b> نطاق خاطئ `+
+    `(مُصحَّح <b>${gr}</b> / خطأ <b>${kh}</b>) · صحيحة أصلاً <b>${cor}</b> · قرآن ${q}/حديث ${h}`+
+    (fc?` · تنبيهات مُحمّلة: <b>${fc}</b>`:``)+` — مطابق للفلاتر: <b>${VIEW.length}</b>`;
+}
+render();
+</script>
+</body>
+</html>

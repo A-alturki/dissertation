@@ -1,0 +1,100 @@
+1- Agree
+2- correctable disagreement
+3- correction disagreement (ayah substring)
+4- correction disagreement (multiple correction/ some correct)
+5- agree
+6- correction disagreement (multiple correction/ some correct)
+7- agree
+8- Mostly agree (each annotator provided 2 of 3 total correction)
+9- agree
+10- correction disagreement (multiple correction/ some correct)
+11- Complete 3-way disagreement
+12- complete 3-way disagreement
+13- correctable disagreement
+14- agree
+15- agree
+16- Complete 3-way disagreement
+17- correction disagreement - they annotated the wrong SPAN
+18- 3-way correction disagreement (multiple correction/ some correct)
+19- agree
+20- agree
+21- correctable disagreement
+22- correctable disagreement
+23- agree
+24- agree
+25- agree
+26- correctable disagreement
+27- agree
+28- correctable disagreement
+29- correctable disagreement
+30- correctable disagreement
+31- mostly agree hadith each annotator subsection of total corrections -- hadith correction problem
+32- complete 3-way correction disagreement (2 annotators corrected the wrong hadith)
+33- complete 3-way disagreement (I don't even know what span they are annotating here)
+34- complete 3-way disagreement (one says no correction, one says quran, one says hadith)
+35- agree
+36- mostly agree on correction each annotator selected 2 of 3 total corrections (labelled correction as wrong because of number)
+37- correctable disagreement - (labelled correction as wrong because of number)
+38- disagreement on correction (all different variants of the same hadith)
+39- agree
+40- 2 annotators didnt even answer this one - 
+41- agree - all put wrong because of hadith number
+42- agree on correctable - disagree on corrections
+43- agree
+44- correctable disagreement because of wrong span annotation
+45- agree
+46- correctable disagreement
+47- correctable disagreement
+48- agree
+49- correctable disagreement
+50- agree
+51- agree
+52- correectable disagreement
+53- agree
+54- agree
+55- mostly agree/correction disagreement (multiple correction/ some correct)
+56- mostly agree/correction disagreement (multiple correction/ some correct)
+57- agree
+58- they completely agree on everything but annotated differently
+59- mostly agree/correction disagreement (multiple correction/ some correct)
+60- agree
+61- correction disagreement
+62- agree
+63- agree
+64- agree
+65- agree
+66- agree
+67- agree
+68- correction 2-way disagreement - (labelled correction as wrong because of number)
+69- correctable 2-way disagreement
+70- correctable 2-way disagreement
+71- correction 2-way disagreement - (labelled correction as wrong because of number)
+72- agree
+73- agree
+74- agree
+75- correction 2-way disagreement - (labelled correction as wrong because of number)
+76- agree
+77- agree
+78- complete 3-way disagreement (different variants of the same hadith in corrections)
+79- agree - all labelled hadith incorrect because of number
+80- 2 annotators agree on hadith correction with minor variant - one annotator annotated the wrong span
+81- mostly completely agree on hadith (one annotator one less variant) - all labelled correction as incorrect
+82- agree
+83- agree
+84- agree on correctable - complete 3 way disagreement on hadith corrections
+85- agree on correctable - 2-way disagreement on correction
+86- disagreement on correctable - disagreement on hadith count correction
+87- agree on correcetable - minor disagreement on correction
+88- too many hadith variants - (multiple correction/ some correct)
+89- disagreement on correectable - minor disagreement on correction
+90- agree
+91- agree
+92- agree
+93- agree
+94- agree
+95- agree
+96- agree
+97- agree
+98- correction minor disagreement (multiple correction/ some correct)
+99- 2-way disagreement on correctable
+100- 2-way disagreement on correctable

@@ -389,6 +389,269 @@ Span: "وَمَنْ لَا يُحِيطُ بِمَالِهِ إِلَّا بِإ
   "verdict": "خطأ", "candidates": []}}
 """
 
+
+GEMINI_CORRECTION_PROMPT_ALTERNATIVE = """\
+You are a hafiz (حافظ) and Islamic scholar with complete memorization of:
+  • The Holy Quran in Uthmani script (الرسم العثماني) with full tashkeel.
+  • The six canonical Hadith collections (الكتب الستة): Sahih al-Bukhari,
+    Sahih Muslim, Sunan Abu Dawud, Jami' al-Tirmidhi, Sunan al-Nasa'i,
+    Sunan Ibn Majah.
+ 
+You are given ONE Arabic span that an AI model presented as a Quranic ayah or a
+Prophetic hadith, but which is INCORRECT — misquoted, misdiacritized, paraphrased,
+garbled, or entirely fabricated. Do two things in one step:
+  1. Decide whether the span is a recoverable distortion of a REAL canonical
+     text, or whether it is baseless (خطأ).
+  2. If recoverable, return EVERY canonical text the span genuinely distorts.
+ 
+────────────────────────────────────────────────────────────────────────
+THE CORE RULE — WHAT COUNTS AS A CORRECTION
+────────────────────────────────────────────────────────────────────────
+A candidate is a valid correction if you can identify ONE SPECIFIC canonical
+text that the span is a distortion of. Distortion spans a spectrum — recover the
+correction across ALL of it, not only near-verbatim cases:
+ 
+  • VERBATIM / LIGHT: after ignoring tashkeel and normalizing letters
+    (أ إ آ ا → ا ; ى → ي ; ة → ه ; ؤ ئ → hamza), a meaningful contiguous
+    sequence of words from the span appears in the candidate.
+  • HEAVY PARAPHRASE / SEMANTIC: the span carries no long contiguous run, but it
+    is a recognizable REWORDING of ONE specific text — same verse or hadith,
+    rephrased, reordered, or synonym-swapped, such that a knowledgeable reader
+    identifies exactly which text it is trying (and failing) to quote. RECOVER
+    THESE. Do not decline a span merely because its wording diverges heavily from
+    the source; if you can name the single specific text it distorts, correct it.
+ 
+Bias toward recovery: if a specific real text is identifiable behind the span,
+returning it is preferred over declining. Decline only when NO single specific
+text underlies the span (see خطأ conditions).
+ 
+The identification must rest on DISTINCTIVE CONTENT (matn / verse wording).
+Shared isnad frames and honorifics (صلى الله عليه وسلم ، رسول الله ، عن فلان ،
+قال ، رضي الله عنه) are NOT content — a correspondence resting only on such
+formulaic words is NOT a valid match.
+ 
+Output "خطأ" (no candidates) when the span corresponds to NO SINGLE SPECIFIC
+text — including:
+  • It shares only the TOPIC/MEANING with real texts but is not a rewording of
+    any ONE particular text — a generic statement on the theme.
+  • Its content is scattered across DIFFERENT texts, with no single text it
+    distorts as a whole.
+  • The only overlap is boilerplate isnad/honorific wording.
+  • It is fluent and Islamic-sounding but reconstructs no real text (fabricated).
+  • It is garbled / stitched from incoherent fragments.
+  • It is mislabeled: a distortion of a HADITH presented as an ayah (or vice
+    versa) — if it is not a distortion of a text of the claimed type, output خطأ.
+ 
+Loosening to semantic matches is NOT license to map any on-topic span to a
+convenient text. The test is always: is this span a distortion of ONE SPECIFIC
+identifiable text? If yes → correct it at the appropriate confidence. If it is
+only thematically related, fabricated, or scattered → خطأ.
+ 
+────────────────────────────────────────────────────────────────────────
+HOW MANY CANDIDATES
+────────────────────────────────────────────────────────────────────────
+  • Return as many as genuinely satisfy the rule — no fixed number. A span may
+    distort a SINGLE text, a run of consecutive ayahs, or a matn attested as
+    several close variants across the six books (return each genuine variant).
+  • Do NOT pad with near-topic texts. Every candidate must independently pass the
+    identification rule.
+ 
+────────────────────────────────────────────────────────────────────────
+OUTPUT — valid JSON only, FIELDS IN THIS EXACT ORDER:
+{{
+  "rationale": "<brief: which specific text(s) the span distorts and the
+                correspondence — the contiguous phrase for verbatim matches, or
+                the specific rewording relationship for paraphrase matches — or
+                why it is خطأ (topic-only / scattered / boilerplate / fabricated
+                / garbled / mislabeled)>",
+  "verdict": "ok" | "خطأ",
+  "candidates": [
+    {{"text": "<exact canonical text>",
+      "source": "سورة <name> <n>"  OR  "<collection>",
+      "matched_run": "<longest contiguous substantive phrase shared with the
+                       span; for a paraphrase match with no contiguous run, give
+                       the key corresponding wording instead>",
+      "confidence": "paraphrase" | "low" | "medium" | "high"}}
+  ]
+}}
+  • Quran "text": full Uthmani ayah(s) with tashkeel. Hadith "text": matn only,
+    no isnad, no "رواه…". For Hadith, identification is by the MATN; a reference
+    number is not required and not important.
+  • Confidence:
+      high       — long contiguous verbatim run; clearly this exact text,
+                   differing only in diacritics / spelling / a single inflection.
+      medium     — a real multi-word content phrase matches, with heavier
+                   corruption, partial paraphrase, or a fused extra clause.
+      low        — only a short content phrase matches verbatim; plausible.
+      paraphrase — NO reliable contiguous verbatim run, but the span is
+                   identifiable as a semantic rewording of ONE specific text.
+                   The recovered-by-meaning tier: correct but lower trust; the
+                   rationale must name the specific target and the correspondence.
+  • The tier must reflect actual match strength and must NOT be inflated by shared
+    isnad/honorific words.
+  • Rank candidates high → paraphrase. When verdict is "خطأ", candidates = [].
+ 
+────────────────────────────────────────────────────────────────────────
+EXAMPLES
+────────────────────────────────────────────────────────────────────────
+# Quran — long verbatim run, only diacritics differ → ok, high
+Span: "ولا تعزموا عقد النكاح حتى يبلغ الكتاب أجله"
+{{"rationale": "Contiguous phrase 'ولا تعزموا عقدة النكاح حتى يبلغ الكتاب أجله' is البقرة 235; differs only in diacritics and 'عقد' vs 'عقدة'.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "وَلَا تَعْزِمُوا عُقْدَةَ النِّكَاحِ حَتَّىٰ يَبْلُغَ الْكِتَابُ أَجَلَهُ ۚ وَاعْلَمُوا أَنَّ اللَّهَ يَعْلَمُ مَا فِي أَنفُسِكُمْ فَاحْذَرُوهُ ۚ وَاعْلَمُوا أَنَّ اللَّهَ غَفُورٌ حَلِيمٌ",
+      "source": "سورة البقرة 235",
+      "matched_run": "ولا تعزموا عقدة النكاح حتى يبلغ الكتاب أجله", "confidence": "high"}}
+]}}
+ 
+# Quran — heavy paraphrase, no contiguous run, clearly ONE verse → ok, paraphrase
+Span: "ولولا تدافع الرسل والمؤمنون لما ثبتت السماوات والأرض"
+{{"rationale": "No verbatim run, but a recognizable rewording of البقرة 251: 'دفع الله الناس بعضهم ببعض لفسدت الأرض' rephrased as 'تدافع الرسل والمؤمنون … ثبتت السماوات والأرض'. Same specific verse, recovered by meaning.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "فَهَزَمُوهُم بِإِذْنِ اللَّهِ وَقَتَلَ دَاوُودُ جَالُوتَ وَآتَاهُ اللَّهُ الْمُلْكَ وَالْحِكْمَةَ وَعَلَّمَهُ مِمَّا يَشَاءُ ۗ وَلَوْلَا دَفْعُ اللَّهِ النَّاسَ بَعْضَهُم بِبَعْضٍ لَّفَسَدَتِ الْأَرْضُ وَلَٰكِنَّ اللَّهَ ذُو فَضْلٍ عَلَى الْعَالَمِينَ",
+      "source": "سورة البقرة 251",
+      "matched_run": "دفع الله الناس بعضهم ببعض لفسدت الأرض (rephrased as تدافع الرسل والمؤمنون … السماوات والأرض)",
+      "confidence": "paraphrase"}}
+]}}
+ 
+# Hadith — same matn attested in two books → ok, two candidates (matn identifies it)
+Span: "تزوجوا الودود الولود"
+{{"rationale": "'تزوجوا الودود الولود' is the verbatim opening matn of one specific hadith, attested with the same wording in two of the six books.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "تَزَوَّجُوا الْوَدُودَ الْوَلُودَ فَإِنِّي مُكَاثِرٌ بِكُمُ الأُمَمَ", "source": "سنن أبي داود",
+      "matched_run": "تزوجوا الودود الولود", "confidence": "high"}},
+    {{"text": "تَزَوَّجُوا الْوَدُودَ الْوَلُودَ فَإِنِّي مُكَاثِرٌ بِكُمُ الأُمَمَ", "source": "سنن النسائي",
+      "matched_run": "تزوجوا الودود الولود", "confidence": "high"}}
+]}}
+ 
+# Hadith — verbatim matn spine + a fused extra clause → ok, high
+Span: "أفضل الصدقة سقي الماء والحج المبرور"
+{{"rationale": "Verbatim matn spine 'أفضل الصدقة سقي الماء' matches one specific hadith; 'والحج المبرور' is fused on.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "أَفْضَلُ الصَّدَقَةِ سَقْيُ الْمَاءِ", "source": "سنن ابن ماجه",
+      "matched_run": "أفضل الصدقة سقي الماء", "confidence": "high"}}
+]}}
+ 
+# Hadith — overlap is ONLY isnad/honorific boilerplate → خطأ
+Span: "قال رسول الله صلى الله عليه وسلم في أمر عظيم من أمور الدين"
+{{"rationale": "Only the isnad/honorific frame is shared; no distinctive matn phrase reproduces any single hadith, and it is not a rewording of one. Boilerplate-only.",
+  "verdict": "خطأ", "candidates": []}}
+ 
+# Quran — topic + scattered single words only → خطأ
+Span: "وَالْحَجُّ أَشَدُّ الْفُرُوجِ"
+{{"rationale": "'الحج' occurs in البقرة 197 and 'فروج' in المؤمنون 5, but the span is not a rewording of any ONE verse — scattered words across different verses.",
+  "verdict": "خطأ", "candidates": []}}
+ 
+# Mislabeled — presented as an ayah but is a distortion of a hadith → خطأ (ayah channel)
+Span: "ولا تقولوا لما أصابكم لو كنا فاعلين لكنا خيرا من الذين فعلوا"
+{{"rationale": "Not a Quranic verse; a distortion of the hadith 'وإن أصابك شيء فلا تقل لو أني فعلت … ولكن قل قدر الله وما شاء فعل'. As an ayah it corresponds to no specific verse.",
+  "verdict": "خطأ", "candidates": []}}
+ 
+# Garbled / stitched fragments → خطأ
+Span: "وَمَنْ لَا يُحِيطُ بِمَالِهِ إِلَّا بِإِذْنِهِ يُحِيطُ بِمَالِهِ وَسَعَ كُرْسِيُّ السَّلَامُ…"
+{{"rationale": "Incoherent fragments stitched together; corresponds to no single real text.",
+  "verdict": "خطأ", "candidates": []}}
+"""
+
+
+GEMINI_CORRECTION_PROMPT_V3  = """\
+You are a hafiz and Islamic scholar with complete memorization of the Holy Quran (Uthmani script)
+and the six canonical Hadith collections (البخاري، مسلم، أبو داود، الترمذي، النسائي، ابن ماجه).
+ 
+You receive ONE Arabic span that was presented as a Quranic ayah or a Prophetic hadith but is
+INCORRECT — misquoted, misdiacritized, paraphrased, garbled, fused, or fabricated. Your job: name
+the real canonical text(s) the span is a distortion of, and return them.
+ 
+════════════════════════════════════════════════════════════════
+GOVERNING PRINCIPLE
+════════════════════════════════════════════════════════════════
+If you can name a SPECIFIC verse or hadith that the span distorts, you MUST return it as a
+candidate. Recognition IS the correction. Do not decline a text you can identify.
+ 
+A span can be wrong in many ways and still be identifiable. NONE of these justify خطأ on their own —
+they are corrections to make, not reasons to give up:
+  • The span MIXES two or more real texts → return EACH text it distorts (one candidate per text).
+  • The span is GARBLED or heavily paraphrased but a specific text is recognizable → return it.
+  • The span FUSES the ending of one verse onto another → return the text(s) it draws from.
+  • The span is MISLABELED (a real verse presented as hadith, or vice versa) → still return the
+    real text you identified; note the true type in the rationale.
+ 
+Return "خطأ" ONLY when you cannot name any specific text — i.e. the span is a generic statement on
+a theme that reworps no particular verse/hadith, or is fabricated from nothing. If your reasoning
+mentions a specific ayah or hadith by name, that is proof it is NOT خطأ — return that text.
+ 
+Matching rests on DISTINCTIVE CONTENT. A match on only isnad/honorific boilerplate
+(قال رسول الله، صلى الله عليه وسلم، عن فلان) is not a match. For hadith, identify by the MATN; the
+reference number is not important.
+ 
+════════════════════════════════════════════════════════════════
+OUTPUT — valid JSON only, fields in this order:
+{{
+  "rationale": "<which specific text(s) the span distorts, and how (mixed / garbled / fused /
+                mislabeled / paraphrased) — or, if خطأ, why no specific text can be named>",
+  "verdict": "ok" | "خطأ",
+  "candidates": [
+    {{"text": "<exact canonical text: full Uthmani ayah with tashkeel, or hadith matn only>",
+      "source": "سورة <name> <n>" OR "<collection>",
+      "confidence": "high" | "medium" | "low" | "paraphrase"}}
+  ]
+}}
+ 
+confidence:
+  high       — long verbatim run; clearly this text, differing only in diacritics/spelling.
+  medium     — a real content phrase matches, with heavier corruption or a fused clause.
+  low        — only a short content phrase matches.
+  paraphrase — no verbatim run, but the span is a recognizable rewording of ONE specific text.
+Return one candidate per distinct text (so a mixed span yields multiple). Rank high → paraphrase.
+When verdict is "خطأ", candidates must be [].
+ 
+════════════════════════════════════════════════════════════════
+EXAMPLES
+════════════════════════════════════════════════════════════════
+# Mixes two real verses → return BOTH (not خطأ)
+Span: "ولتسبحوا بحمده وتسبحوا في الصباح والعشي"
+{{"rationale": "Distorts two verses on glorifying God morning and evening: غافر 55 'وسبح بحمد ربك بالعشي والإبكار' and الفتح 9 'وتسبحوه بكرة وأصيلا'. Return both.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "فَاصْبِرْ إِنَّ وَعْدَ اللَّهِ حَقٌّ وَاسْتَغْفِرْ لِذَنبِكَ وَسَبِّحْ بِحَمْدِ رَبِّكَ بِالْعَشِيِّ وَالْإِبْكَارِ", "source": "سورة غافر 55", "confidence": "paraphrase"}},
+    {{"text": "لِّتُؤْمِنُوا بِاللَّهِ وَرَسُولِهِ وَتُعَزِّرُوهُ وَتُوَقِّرُوهُ وَتُسَبِّحُوهُ بُكْرَةً وَأَصِيلًا", "source": "سورة الفتح 9", "confidence": "paraphrase"}}
+]}}
+ 
+# Mislabeled (verse presented as hadith) → still return the verse (not خطأ)
+Span: "لا يكلف الله نفسا إلا وهي طاقة"
+{{"rationale": "A distortion of البقرة 286 'لا يكلف الله نفسا إلا وسعها' (cf. الطلاق 7). Presented as hadith, but it is a Quranic verse — return the verse and note the mislabeling.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "لَا يُكَلِّفُ اللَّهُ نَفْسًا إِلَّا وُسْعَهَا ۚ لَهَا مَا كَسَبَتْ وَعَلَيْهَا مَا اكْتَسَبَتْ", "source": "سورة البقرة 286", "confidence": "high"}}
+]}}
+ 
+# Garbled but one verse recognizable → return it (not خطأ)
+Span: "وأحللنا لكم ليلة الفطر وأحرمّا لكم منافعكم"
+{{"rationale": "Garbled, but mimics البقرة 187 'أحل لكم ليلة الصيام الرفث إلى نسائكم' with 'الفطر' swapped for 'الصيام' and an incoherent tail. One recognizable verse.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "أُحِلَّ لَكُمْ لَيْلَةَ الصِّيَامِ الرَّفَثُ إِلَىٰ نِسَائِكُمْ ۚ هُنَّ لِبَاسٌ لَّكُمْ وَأَنتُمْ لِبَاسٌ لَّهُنَّ", "source": "سورة البقرة 187", "confidence": "medium"}}
+]}}
+ 
+# Fuses two verses → return both texts it draws from
+Span: "ولا تقتلوا أنفسكم إن الله لا يحب المسرفين"
+{{"rationale": "Fuses النساء 29 'ولا تقتلوا أنفسكم إن الله كان بكم رحيما' with the ending 'لا يحب المسرفين' from الأعراف 31. Return both sources.",
+  "verdict": "ok",
+  "candidates": [
+    {{"text": "وَلَا تَقْتُلُوا أَنفُسَكُمْ ۚ إِنَّ اللَّهَ كَانَ بِكُمْ رَحِيمًا", "source": "سورة النساء 29", "confidence": "high"}},
+    {{"text": "وَكُلُوا وَاشْرَبُوا وَلَا تُسْرِفُوا ۚ إِنَّهُ لَا يُحِبُّ الْمُسْرِفِينَ", "source": "سورة الأعراف 31", "confidence": "medium"}}
+]}}
+ 
+# Genuinely unidentifiable → خطأ
+Span: "التراويح في الحج مثل الصلاة في المسجد النبوي فمن تراوح فيه يلعب من الصلاة"
+{{"rationale": "Fluent and on-topic but reworps no specific verse or hadith; no single text is nameable. Fabricated.",
+  "verdict": "خطأ", "candidates": []}}
+"""
+
+
 def gate_user(span, ref):
     return (f"The following span was presented as a {REF_LABEL.get(ref, ref)} but is "
             f"INCORRECT. Judge whether it is a recoverable distortion of a real canonical "

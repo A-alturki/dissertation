@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batch Predictions Viewer</title>
+<style>
+  :root { --bg:#f4f5f7; --card:#fff; --line:#e2e5ea; --ink:#1f2430; --mut:#6b7280;
+          --ok:#16794c; --okbg:#e7f6ee; --err:#b42318; --errbg:#fdecea; --acc:#2563eb; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:"Segoe UI",system-ui,Tahoma,Arial,sans-serif;
+         background:var(--bg); color:var(--ink); }
+  header { position:sticky; top:0; background:var(--card); border-bottom:1px solid var(--line);
+           padding:12px 18px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; z-index:5; }
+  header h1 { font-size:16px; margin:0; font-weight:700; }
+  header .sp { flex:1; }
+  input[type=file] { font-size:13px; }
+  input[type=search] { padding:6px 10px; border:1px solid var(--line); border-radius:8px;
+                       font-size:13px; min-width:200px; }
+  select, button { padding:6px 10px; border:1px solid var(--line); border-radius:8px;
+                   background:#fff; font-size:13px; cursor:pointer; }
+  .stats { font-size:13px; color:var(--mut); }
+  .stats b { color:var(--ink); }
+  main { max-width:1000px; margin:0 auto; padding:18px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px;
+          padding:14px 16px; margin-bottom:14px; }
+  .row { display:flex; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+  .idx { font-size:12px; color:var(--mut); font-family:ui-monospace,Consolas,monospace; }
+  .badge { font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; }
+  .b-ok { color:var(--ok); background:var(--okbg); }
+  .b-err { color:var(--err); background:var(--errbg); }
+  .b-block { color:#92400e; background:#fef3c7; }
+  .conf { font-size:11px; font-weight:600; padding:1px 8px; border-radius:999px;
+          background:#eef2ff; color:#3730a3; }
+  .label { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em;
+           margin:10px 0 3px; font-weight:700; }
+  .span { font-size:19px; line-height:1.9; }
+  .rationale { font-size:14px; color:#374151; line-height:1.7; direction:auto; }
+  .cand { border:1px solid var(--line); border-radius:9px; padding:9px 11px; margin-top:8px;
+          background:#fafbfc; }
+  .cand .text { font-size:17px; line-height:1.9; }
+  .cand .meta { font-size:12px; color:var(--mut); margin-top:5px; display:flex; gap:12px;
+                flex-wrap:wrap; align-items:center; }
+  .cand .meta .src { color:var(--acc); font-weight:600; }
+  .mrun { font-family:inherit; background:#f1f5f9; padding:1px 6px; border-radius:5px; }
+  .empty { color:var(--mut); text-align:center; padding:40px; }
+  .drop { border:2px dashed var(--line); border-radius:12px; padding:30px; text-align:center;
+          color:var(--mut); margin:18px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Batch Predictions Viewer</h1>
+  <input type="file" id="file" accept=".jsonl,.json" multiple>
+  <select id="fverdict">
+    <option value="">كل النتائج</option>
+    <option value="ok">ok فقط</option>
+    <option value="خطأ">خطأ فقط</option>
+    <option value="_err">أخطاء/محجوب</option>
+  </select>
+  <input type="search" id="q" placeholder="بحث في النص…">
+  <span class="sp"></span>
+  <span class="stats" id="stats"></span>
+</header>
+<main>
+  <div class="drop" id="drop">اسحب ملف <code>predictions.jsonl</code> هنا، أو اختره من الأعلى.</div>
+  <div id="list"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+let RECS = [];   // {idx, file, span, verdict, rationale, candidates:[], error}
+
+function spanOf(userText){
+  if(!userText) return "";
+  const a = userText.indexOf("<<<"), b = userText.lastIndexOf(">>>");
+  if(a>=0 && b>a) return userText.slice(a+3, b).replace(/^\n+|\n+$/g,"").trim();
+  return userText.trim();
+}
+function modelText(resp){
+  try{
+    const c = (resp.candidates||[])[0];
+    if(!c){ const br=(resp.promptFeedback||{}).blockReason; return {text:null, err: br?("blocked:"+br):"no_candidates"}; }
+    const parts = ((c.content||{}).parts)||[];
+    const t = parts.map(p=>p.text||"").join("");
+    if(!t) return {text:null, err:"empty:"+(c.finishReason||"?")};
+    return {text:t, err:null};
+  }catch(e){ return {text:null, err:"parse:"+e}; }
+}
+function parseJSON(t){
+  if(!t) return null;
+  let s = t.replace(/```(?:json)?/gi,"").replace(/```/g,"").trim();
+  try{ return JSON.parse(s); }catch(e){}
+  const m = s.match(/\{[\s\S]*\}/);
+  if(m){ try{ return JSON.parse(m[0]); }catch(e){} }
+  return null;
+}
+
+function ingest(text, fname){
+  const lines = text.split(/\r?\n/).filter(l=>l.trim());
+  lines.forEach((l,i)=>{
+    let o; try{ o=JSON.parse(l); }catch(e){ return; }
+    const req = o.request||o.body||{};
+    const user = (((req.contents||[])[0]||{}).parts||[{}])[0].text || "";
+    const resp = o.response||{};
+    const mt = modelText(resp);
+    const pred = parseJSON(mt.text);
+    RECS.push({
+      idx:i, file:fname, span:spanOf(user),
+      verdict: pred ? (pred.verdict||"?") : null,
+      rationale: pred ? (pred.rationale||"") : "",
+      candidates: pred ? (pred.candidates||[]) : [],
+      error: mt.err || (pred?null:"unparsable"),
+      raw: mt.text
+    });
+  });
+}
+
+function render(){
+  const fv = $("#fverdict").value, q = $("#q").value.trim();
+  let rows = RECS;
+  if(fv==="_err") rows = rows.filter(r=>r.error);
+  else if(fv) rows = rows.filter(r=>r.verdict===fv);
+  if(q) rows = rows.filter(r => (r.span+" "+r.rationale+" "+r.candidates.map(c=>c.text).join(" ")).includes(q));
+
+  const nok = RECS.filter(r=>r.verdict==="ok").length;
+  const nerr = RECS.filter(r=>r.verdict==="خطأ").length;
+  const nbad = RECS.filter(r=>r.error).length;
+  $("#stats").innerHTML = `<b>${RECS.length}</b> سجل · ok <b>${nok}</b> · خطأ <b>${nerr}</b> · مشاكل <b>${nbad}</b> · معروض <b>${rows.length}</b>`;
+
+  const files = [...new Set(RECS.map(r=>r.file))];
+  $("#list").innerHTML = rows.map(r=>{
+    const vb = r.error ? `<span class="badge b-block">${r.error}</span>`
+             : r.verdict==="ok" ? `<span class="badge b-ok">ok</span>`
+             : `<span class="badge b-err">خطأ</span>`;
+    const cands = (r.candidates||[]).map(c=>`
+      <div class="cand">
+        <div class="text">${esc(c.text||"")}</div>
+        <div class="meta">
+          ${c.source?`<span class="src">${esc(c.source)}</span>`:""}
+          ${c.confidence?`<span class="conf">${esc(c.confidence)}</span>`:""}
+          ${c.matched_run?`<span>مطابقة: <span class="mrun">${esc(c.matched_run)}</span></span>`:""}
+        </div>
+      </div>`).join("");
+    return `<div class="card">
+      <div class="row">
+        <span class="idx">${files.length>1?esc(r.file)+" · ":""}#${r.idx}</span>
+        ${vb}
+      </div>
+      <div class="label">النص (span)</div>
+      <div class="span">${esc(r.span)}</div>
+      ${r.rationale?`<div class="label">التبرير</div><div class="rationale">${esc(r.rationale)}</div>`:""}
+      ${cands?`<div class="label">التصحيحات المقترحة (${r.candidates.length})</div>${cands}`:""}
+      ${r.error&&!r.raw?"":""}
+    </div>`;
+  }).join("") || `<div class="empty">لا سجلات مطابقة.</div>`;
+}
+function esc(s){ return (s==null?"":String(s)).replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c])); }
+
+function loadFiles(files){
+  [...files].forEach(f=>{
+    const rd = new FileReader();
+    rd.onload = e => { ingest(e.target.result, f.name); $("#drop").style.display="none"; render(); };
+    rd.readAsText(f);
+  });
+}
+$("#file").addEventListener("change", e=>{ RECS=[]; loadFiles(e.target.files); });
+$("#fverdict").addEventListener("change", render);
+$("#q").addEventListener("input", render);
+const drop=$("#drop");
+document.addEventListener("dragover", e=>{e.preventDefault();});
+document.addEventListener("drop", e=>{ e.preventDefault(); if(e.dataTransfer.files.length){ RECS=[]; loadFiles(e.dataTransfer.files);} });
+</script>
+</body>
+</html>
