@@ -41,6 +41,30 @@ THINKING_KWARGS = {
 # Models whose <think> blocks must be stripped in post-processing (no template flag).
 STRIP_THINKING = {"deepseek-r1-llama-8b", "deepseek-r1-qwen-32b", "deepseek-r1-llama-70b"}
 
+# Some tokenizers ship no chat_template — supply the model's prompt format manually
+# (built directly, not via apply_chat_template). Ported from inference_vllm.py.
+#   jais: its documented [|Human|]/[|AI|] Instruction format.
+#   acegpt-v2: standard Llama-3 instruct format (it's Llama-3-8B based; tokenizer omits the template).
+JAIS_PROMPT_TEMPLATE = (
+    "### Instruction: {system}\n\n"
+    "أكمل المحادثة أدناه بين [|Human|] و [|AI|]:\n"
+    "### Input: [|Human|] {prompt}\n### Response: [|AI|]"
+)
+LLAMA3_PROMPT_TEMPLATE = (
+    "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
+    "{system}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
+    "{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
+)
+MANUAL_TEMPLATES = {
+    "jais-13b":  JAIS_PROMPT_TEMPLATE,
+    "jais-70b":  JAIS_PROMPT_TEMPLATE,
+    "acegpt-8b": LLAMA3_PROMPT_TEMPLATE,
+}
+
+# Set by --allow-thinking: when True, do NOT inject the thinking-disabling kwargs, so
+# models with a native thinking mode (e.g. Qwen3) reason before answering.
+ALLOW_THINKING = False
+
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
     "مستنداً إلى القرآن الكريم والأحاديث النبوية الشريفة.\n"
@@ -52,8 +76,12 @@ ALT_PROMPT_2025 = "أجب عن السؤال التالي و استشهد بآي�
 
 ALT_PROMPT_2025_explicit = "أجب عن السؤال التالي و استشهد بآيات من القرآن الكريم و احاديث شريفة عند الاستشهاد بآية قرآنية، اذكر اسم السورة ورقم الآية. عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ)"
 
+VANILLA_PROMPT =  "أجب عن السؤال التالي."
 
-PROMPTS = {"default": SYSTEM_PROMPT, "alt2025": ALT_PROMPT_2025, "alt2025-explicit": ALT_PROMPT_2025_explicit}
+
+
+PROMPTS = {"default": SYSTEM_PROMPT, "alt2025": ALT_PROMPT_2025,
+           "alt2025-explicit": ALT_PROMPT_2025_explicit, "vanilla": VANILLA_PROMPT}
 
 # Sampling fallbacks for models whose generation_config doesn't enable sampling.
 DEFAULT_TEMPERATURE = 0.7
@@ -211,15 +239,22 @@ def generate_with_retry(prompts, tokenizer, model, model_key, max_new_tokens, te
 def generate_batch(prompts, tokenizer, model, model_key: str, max_new_tokens: int = 512,
                    temperature: float = None, top_p: float = None) -> list:
     """Generate answers for a batch of prompts in one model.generate() call."""
-    extra = THINKING_KWARGS.get(model_key, {})
-    texts = [
-        tokenizer.apply_chat_template(build_messages(p, model_key), tokenize=False,
-                                      add_generation_prompt=True, **extra)
-        for p in prompts
-    ]
-    # Template strings already include special tokens -> add_special_tokens=False.
+    # --allow-thinking: skip the thinking-disabling kwargs so native-thinking models reason.
+    extra = {} if ALLOW_THINKING else THINKING_KWARGS.get(model_key, {})
+    manual = MANUAL_TEMPLATES.get(model_key)
+    if manual:                                   # tokenizer has no chat_template
+        texts = [manual.format(system=SYSTEM_PROMPT, prompt=p) for p in prompts]
+    else:
+        texts = [
+            tokenizer.apply_chat_template(build_messages(p, model_key), tokenize=False,
+                                          add_generation_prompt=True, **extra)
+            for p in prompts
+        ]
+    # apply_chat_template output and the Llama-3 manual template already embed BOS/special
+    # tokens (-> don't re-add); the jais manual template does not, so let the tokenizer add them.
+    add_special = bool(manual) and not manual.startswith("<|begin_of_text|>")
     inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True,
-                       max_length=4096, add_special_tokens=False).to(model.device)
+                       max_length=4096, add_special_tokens=add_special).to(model.device)
 
     do_sample = temperature > 0     # temperature=0 -> greedy
     with torch.no_grad():
@@ -264,7 +299,7 @@ def main():
     parser.add_argument("--input",       default="../data/classified/rag_questions.json",
                         help="prompts file: .xlsx (qid+prompt) or .json")
     parser.add_argument("--output-dir",  default="../outputs/answers/")
-    parser.add_argument("--max-tokens",  type=int, default=512)
+    parser.add_argument("--max-tokens",  type=int, default=1500)
     parser.add_argument("--batch-size",  type=int, default=16,
                         help="Prompts per generate() call (raise if GPU memory allows)")
     parser.add_argument("--temperature", type=float, default=None,
@@ -274,6 +309,9 @@ def main():
     parser.add_argument("--no-quantize", action="store_true", help="Disable 4-bit quantization (for A6000)")
     parser.add_argument("--prompt", choices=list(PROMPTS), default="alt2025-explicit",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
+    parser.add_argument("--allow-thinking", action="store_true",
+                        help="Let native-thinking models (e.g. Qwen3) reason. <think> blocks are "
+                             "split into a separate 'thinking' field; 'answer' keeps the final text.")
     parser.add_argument("--limit", type=int, default=None,
                         help="Only process the first N prompts (for smoke tests)")
     parser.add_argument("--num-shards", type=int, default=1,
@@ -285,9 +323,10 @@ def main():
     if not (0 <= args.shard_id < args.num_shards):
         parser.error("--shard-id must be in [0, --num-shards)")
 
-    global SYSTEM_PROMPT
+    global SYSTEM_PROMPT, ALLOW_THINKING
     SYSTEM_PROMPT = PROMPTS[args.prompt]
-    print(f"System prompt: {args.prompt}")
+    ALLOW_THINKING = args.allow_thinking
+    print(f"System prompt: {args.prompt}  |  allow_thinking={ALLOW_THINKING}")
 
     prompts = load_prompts(args.input)
     if args.limit:
@@ -349,7 +388,12 @@ def main():
             print(f"\nError on batch at {i}: {e}")
             answers = [f"ERROR: {e}"] * len(chunk)
         for c, a in zip(chunk, answers):
-            results.append({"id": c["id"], "prompt": c["prompt"], "answer": a, "model": args.model})
+            entry = {"id": c["id"], "prompt": c["prompt"], "answer": a, "model": args.model}
+            if "</think>" in a:                  # thinking model: keep reasoning separate
+                think, _, ans = a.partition("</think>")
+                entry["thinking"] = think.replace("<think>", "").strip()
+                entry["answer"] = ans.strip()
+            results.append(entry)
         if len(results) - last_saved >= save_every:
             save()
             last_saved = len(results)
