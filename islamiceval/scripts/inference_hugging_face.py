@@ -8,7 +8,7 @@ Usage:
     python inference_hugging_face.py --model qwen3-8b --no-quantize   # for A6000 (48GB)
 """
 
-import os, json, argparse
+import os, sys, json, argparse
 # Reduce CUDA fragmentation (helps avoid OOM on variable-length batches). Must be
 # set before torch initializes CUDA.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
@@ -58,12 +58,23 @@ LLAMA3_PROMPT_TEMPLATE = (
 MANUAL_TEMPLATES = {
     "jais-13b":  JAIS_PROMPT_TEMPLATE,
     "jais-70b":  JAIS_PROMPT_TEMPLATE,
+    "jais-30b":  JAIS_PROMPT_TEMPLATE,   # jais-family-30b ships no chat_template (verified)
     "acegpt-8b": LLAMA3_PROMPT_TEMPLATE,
+    # NB: acegpt-32b DOES ship a chat_template (unlike the 8B) -> uses apply_chat_template.
 }
 
 # Set by --allow-thinking: when True, do NOT inject the thinking-disabling kwargs, so
 # models with a native thinking mode (e.g. Qwen3) reason before answering.
 ALLOW_THINKING = False
+
+# Resolved at runtime from each model's creator-default generation_config (resolve_gen_config).
+GEN_TOP_K = None
+GEN_DO_SAMPLE = None
+
+# Model-card sampling recommendations for fields the repo's generation_config.json omits.
+CARD_OVERRIDES = {
+    "ministral-3-14b": {"temperature": 0.15},   # Mistral model-card recommendation
+}
 
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
@@ -108,6 +119,68 @@ def resolve_sampling(model_id: str, cli_temperature, cli_top_p):
         if top_p is None:
             top_p = gc.top_p if (samples and gc.top_p) else DEFAULT_TOP_P
     return temperature, top_p
+
+
+def resolve_gen_config(model_id, model_key, cli_temperature, cli_top_p):
+    """Creator-default sampling: read the repo's generation_config.json, then apply the
+    model card's recommendation for anything it omits (CARD_OVERRIDES), then a mild
+    fallback — never impose greedy. CLI --temperature/--top-p override everything.
+    Returns dict(do_sample, temperature, top_p, top_k)."""
+    gc = None
+    try:
+        from transformers import GenerationConfig
+        gc = GenerationConfig.from_pretrained(model_id)
+    except Exception:
+        pass
+    do_sample   = bool(getattr(gc, "do_sample", False)) if gc else False
+    temperature = getattr(gc, "temperature", None)      if gc else None
+    top_p       = getattr(gc, "top_p", None)            if gc else None
+    top_k       = getattr(gc, "top_k", None)            if gc else None
+    for k, v in CARD_OVERRIDES.get(model_key, {}).items():   # card fills omitted fields
+        if   k == "do_sample":            do_sample = do_sample or v
+        elif k == "temperature" and not temperature: temperature = v; do_sample = True
+        elif k == "top_p"       and not top_p:       top_p = v
+        elif k == "top_k"       and not top_k:       top_k = v
+    if not do_sample:                                   # never greedy -> mild sampling
+        do_sample = True
+        temperature = temperature or DEFAULT_TEMPERATURE
+        top_p       = top_p or DEFAULT_TOP_P
+    if do_sample and not temperature: temperature = DEFAULT_TEMPERATURE
+    if do_sample and not top_p:       top_p = DEFAULT_TOP_P
+    if cli_temperature is not None:                     # explicit CLI wins
+        temperature = cli_temperature; do_sample = cli_temperature > 0
+    if cli_top_p is not None: top_p = cli_top_p
+    return {"do_sample": do_sample, "temperature": temperature, "top_p": top_p, "top_k": top_k}
+
+
+def resolve_dtype(model_id, mode):
+    """mode: fp16 | bf16 | native. 'native' reads the repo config's torch_dtype
+    (bf16-native models stay bf16 — avoids Gemma fp16 soft-cap overflow)."""
+    if mode == "fp16": return torch.float16
+    if mode == "bf16": return torch.bfloat16
+    try:
+        from transformers import AutoConfig
+        dt = str(getattr(AutoConfig.from_pretrained(model_id, trust_remote_code=True), "torch_dtype", ""))
+        if "bfloat16" in dt: return torch.bfloat16
+        if "float16"  in dt: return torch.float16
+    except Exception:
+        pass
+    return torch.bfloat16   # 2026 large instruct models are bf16-native by default
+
+
+_AR = None
+def is_degenerate(a: str) -> bool:
+    """Smoke-test guard: flag empty/NaN-ish/degenerate fp16 output."""
+    import re
+    global _AR
+    if _AR is None: _AR = re.compile(r'[؀-ۿ]')
+    a = (a or "").strip()
+    if not a or a.startswith("ERROR") or len(a) < 5:      return True
+    letters = [c for c in a if c.isalpha()]
+    if letters and sum(1 for c in letters if _AR.match(c))/len(letters) < 0.3: return True  # not Arabic
+    toks = a.split()
+    if len(toks) >= 8 and len(set(toks)) <= 2:            return True   # single-token loop
+    return False
 
 # used same models as islamiceval + mistral/acegpt/silma 
 MODELS = {
@@ -175,10 +248,20 @@ MODELS = {
     "qwen3-235b":            "Qwen/Qwen3-235B-A22B",                     # MoE, 22B active
     "llama-4-maverick":      "meta-llama/Llama-4-Maverick-17B-128E-Instruct",  # MoE
     "deepseek-v3":           "deepseek-ai/DeepSeek-V3-0324",             # 685B MoE, 37B active
+
+    # ==== Larger 2026 additions — sequential HF run on 2×RTX 8000 (device_map=auto) ====
+    "ministral-3-14b":       "mistralai/Ministral-3-14B-Instruct-2512-BF16",  # BF16 repo (NOT the FP8 default); multimodal->text path
+    # "fanar-2-27b" already above (Gemma3ForCausalLM — bf16)
+    # "gemma-4-31b"  already above -> "google/gemma-4-31B-it" (multimodal->text path; bf16)
+    "qwen3.5-27b":           "Qwen/Qwen3.5-27B",                              # dense, multimodal->text path; thinking-capable
+    "karnak-40b":            "Applied-Innovation-Center/Karnak-40B-v1.0",     # Qwen3-MoE arch
+    "falcon-h1-34b":         "tiiuae/Falcon-H1-34B-Instruct",                 # hybrid (Mamba+attn); general (Arabic-34B repo doesn't exist)
+    "acegpt-32b":            "FreedomIntelligence/AceGPT-v2-32B-Chat",        # Llama arch; HAS chat_template (unlike 8B)
+    "jais-30b":              "inceptionai/jais-family-30b-16k-chat",          # gated; custom ALiBi; manual template
 }
 
 
-def load_model(model_id: str, quantize: bool = True, dtype=torch.float16):
+def load_model(model_id: str, quantize: bool = True, dtype=torch.float16, attn="auto"):
     bnb_config = None
     if quantize:
         bnb_config = BitsAndBytesConfig(
@@ -192,20 +275,20 @@ def load_model(model_id: str, quantize: bool = True, dtype=torch.float16):
     if tokenizer.pad_token_id is None:
         tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
-    # Force fp16 when not quantizing. Without an explicit dtype, from_pretrained loads
-    # in fp32 (~48GB for a 12B) which fills a 48GB RTX 8000 and makes device_map="auto"
-    # offload layers to CPU → catastrophic decode slowdown. fp16 (~24GB) fits fully and
-    # is Turing-native (sm_75 has NO fast bf16, so never let it fall back to bf16/fp32).
-    kw = dict(quantization_config=bnb_config, device_map="auto", trust_remote_code=True)
-    if not quantize:
-        kw["dtype"] = dtype                       # transformers v5 arg name
-    try:
-        model = AutoModelForCausalLM.from_pretrained(model_id, **kw)
-    except TypeError:                             # older transformers: torch_dtype
-        kw.pop("dtype", None)
+    # dtype: pass explicitly (else from_pretrained loads fp32 -> CPU-offload). device_map="auto"
+    # shards across all VISIBLE GPUs (caller sets CUDA_VISIBLE_DEVICES). attn: "sdpa" is the
+    # only fast attention on Turing/sm_75 (no FlashAttention); "auto" leaves it to transformers.
+    def _load(dkey):
+        kw = dict(quantization_config=bnb_config, device_map="auto", trust_remote_code=True)
         if not quantize:
-            kw["torch_dtype"] = dtype
-        model = AutoModelForCausalLM.from_pretrained(model_id, **kw)
+            kw[dkey] = dtype
+        if attn and attn != "auto":
+            kw["attn_implementation"] = attn
+        return AutoModelForCausalLM.from_pretrained(model_id, **kw)
+    try:
+        model = _load("dtype")                    # transformers v5 arg name
+    except TypeError:                             # older transformers: torch_dtype
+        model = _load("torch_dtype")
     return tokenizer, model
 
 
@@ -256,7 +339,9 @@ def generate_batch(prompts, tokenizer, model, model_key: str, max_new_tokens: in
     inputs = tokenizer(texts, return_tensors="pt", padding=True, truncation=True,
                        max_length=4096, add_special_tokens=add_special).to(model.device)
 
-    do_sample = temperature > 0     # temperature=0 -> greedy
+    # do_sample / top_k come from the model's resolved creator-default config (set in main);
+    # fall back to temperature>0 when unset (original behaviour).
+    do_sample = GEN_DO_SAMPLE if GEN_DO_SAMPLE is not None else (temperature > 0)
     with torch.no_grad():
         output = model.generate(
             **inputs,
@@ -264,6 +349,7 @@ def generate_batch(prompts, tokenizer, model, model_key: str, max_new_tokens: in
             do_sample=do_sample,
             temperature=temperature if do_sample else None,
             top_p=top_p if do_sample else None,
+            top_k=GEN_TOP_K if (do_sample and GEN_TOP_K) else None,
             pad_token_id=tokenizer.pad_token_id,
         )
     gen = output[:, inputs["input_ids"].shape[1]:]   # left-padded -> same input width for all
@@ -319,9 +405,27 @@ def main():
                              "writes its own .partKofN file; merge them when all finish.")
     parser.add_argument("--shard-id", type=int, default=0,
                         help="Which shard (0..num_shards-1) this process handles.")
+    # --- opt-in extensions for the larger-model run (defaults preserve original behaviour) ---
+    parser.add_argument("--dtype", choices=["legacy", "native", "fp16", "bf16"], default="legacy",
+                        help="legacy = gemma->bf16 else fp16 (original). native = repo's torch_dtype "
+                             "(bf16-native models stay bf16).")
+    parser.add_argument("--attn", choices=["auto", "sdpa", "eager"], default="auto",
+                        help="attn_implementation. sdpa is the fast Turing/sm_75 path.")
+    parser.add_argument("--seed", type=int, default=42, help="transformers.set_seed for reproducibility.")
+    parser.add_argument("--emit-meta", action="store_true",
+                        help="Write a sidecar <model>_<prompt>.meta.json (resolved gen config, dtype, "
+                             "attn, seed, peak VRAM) and append to config_table.tsv.")
+    parser.add_argument("--print-first-prompt", action="store_true",
+                        help="Print the fully rendered prompt string for the first example (leak check).")
+    parser.add_argument("--smoke", type=int, default=None,
+                        help="Smoke test: generate only the first N prompts, print them, check for "
+                             "NaN/empty/degenerate output; exit 0 (clean) or 2 (degenerate). No full run.")
     args = parser.parse_args()
     if not (0 <= args.shard_id < args.num_shards):
         parser.error("--shard-id must be in [0, --num-shards)")
+
+    from transformers import set_seed
+    set_seed(args.seed)
 
     global SYSTEM_PROMPT, ALLOW_THINKING
     SYSTEM_PROMPT = PROMPTS[args.prompt]
@@ -336,19 +440,58 @@ def main():
         prompts = [p for i, p in enumerate(prompts) if i % args.num_shards == args.shard_id]
         print(f"Shard {args.shard_id}/{args.num_shards}: handling {len(prompts)} prompts")
 
+    global GEN_TOP_K, GEN_DO_SAMPLE
     model_id = MODELS[args.model]
-    # Gemma's attention logit soft-capping overflows fp16's range (±65504) -> inf/NaN ->
-    # CUDA "device-side assert". Gemma MUST load in bf16 (its training dtype; bf16 has the
-    # fp32 exponent range so it can't overflow). Every other model is numerically fine in
-    # fp16 — which on Turing (sm_75, no native bf16) is also much faster. So: gemma -> bf16,
-    # everything else -> fp16. (Only matters with --no-quantize.)
-    load_dtype = torch.bfloat16 if args.model.startswith("gemma") else torch.float16
-    print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}  dtype={load_dtype}")
-    tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype)
+    # dtype: --dtype legacy = the original rule (gemma->bf16 else fp16); native = repo dtype
+    # (bf16-native models stay bf16 — the safe choice for Gemma soft-capping). See resolve_dtype.
+    if args.dtype == "legacy":
+        load_dtype = torch.bfloat16 if args.model.startswith("gemma") else torch.float16
+    else:
+        load_dtype = resolve_dtype(model_id, args.dtype)
+    if torch.cuda.is_available():
+        torch.cuda.reset_peak_memory_stats()
+    print(f"Loading {args.model} ({model_id})  quantize={not args.no_quantize}  dtype={load_dtype}  attn={args.attn}")
+    try:
+        tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype, attn=args.attn)
+    except Exception as e:
+        if args.attn == "sdpa":                   # some custom archs reject sdpa -> retry eager
+            print(f"  [attn] sdpa load failed ({type(e).__name__}: {e}); retrying attn=eager")
+            args.attn = "eager"
+            tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype, attn="eager")
+        else:
+            raise
     print("Model loaded.")
 
-    temperature, top_p = resolve_sampling(model_id, args.temperature, args.top_p)
-    print(f"Sampling on — temperature={temperature}, top_p={top_p}")
+    gen = resolve_gen_config(model_id, args.model, args.temperature, args.top_p)
+    temperature, top_p = gen["temperature"], gen["top_p"]
+    GEN_TOP_K, GEN_DO_SAMPLE = gen["top_k"], gen["do_sample"]
+    print(f"Resolved generation config (creator-default): {gen}")
+
+    # ---- rendered-prompt preview (verify no system content leaked into the user turn) ----
+    def render(p):
+        manual = MANUAL_TEMPLATES.get(args.model)
+        if manual:
+            return manual.format(system=SYSTEM_PROMPT, prompt=p)
+        extra = {} if ALLOW_THINKING else THINKING_KWARGS.get(args.model, {})
+        return tokenizer.apply_chat_template(build_messages(p, args.model), tokenize=False,
+                                             add_generation_prompt=True, **extra)
+    if args.print_first_prompt and prompts:
+        print("=" * 70 + f"\nFIRST RENDERED PROMPT ({args.model}):\n" + "-" * 70)
+        print(render(prompts[0]["prompt"]))
+        print("=" * 70)
+
+    # ---- smoke test: first N prompts, flag NaN/empty/degenerate fp16 output, then exit ----
+    if args.smoke:
+        sm = prompts[:args.smoke]
+        ans = generate_with_retry([c["prompt"] for c in sm], tokenizer, model,
+                                  args.model, args.max_tokens, temperature, top_p)
+        bad = 0
+        for i, (c, a) in enumerate(zip(sm, ans)):
+            deg = is_degenerate(a); bad += deg
+            print(f"\n[smoke {i} · {'DEGENERATE' if deg else 'ok'}] {c['id']}\n{a[:300]}")
+        ok = bad == 0
+        print(f"\nSMOKE {'PASS' if ok else 'FAIL'} — {bad}/{len(ans)} degenerate for {args.model}")
+        sys.exit(0 if ok else 2)
 
     os.makedirs(args.output_dir, exist_ok=True)
     suffix = "" if args.prompt == "default" else f"_{args.prompt}"
@@ -400,6 +543,32 @@ def main():
     save()                            # final flush (remaining < save_every)
 
     print(f"Saved {len(results)} answers -> {out_path}")
+
+    # ---- sidecar metadata + aggregate config table (the requested config record) ----
+    if args.emit_meta:
+        peak = {f"cuda:{d}": round(torch.cuda.max_memory_allocated(d) / 1e9, 2)
+                for d in range(torch.cuda.device_count())} if torch.cuda.is_available() else {}
+        total_vram = round(sum(peak.values()), 2)
+        meta = {
+            "model": args.model, "model_id": model_id,
+            "dtype": str(load_dtype).replace("torch.", ""), "attn": args.attn, "seed": args.seed,
+            "prompt": args.prompt, "allow_thinking": ALLOW_THINKING,
+            "gen_config": gen, "max_tokens": args.max_tokens,
+            "peak_vram_gb": peak, "peak_vram_total_gb": total_vram, "n_answers": len(results),
+        }
+        with open(os.path.join(args.output_dir, f"{args.model}{suffix}.meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        ct = os.path.join(args.output_dir, "config_table.tsv")
+        cols = ["model", "model_id", "dtype", "attn", "seed", "do_sample", "temperature", "top_p",
+                "top_k", "thinking", "max_tokens", "peak_vram_total_gb", "n_answers"]
+        row = [args.model, model_id, meta["dtype"], args.attn, args.seed, gen["do_sample"],
+               gen["temperature"], gen["top_p"], gen["top_k"], ALLOW_THINKING, args.max_tokens,
+               total_vram, len(results)]
+        new = not os.path.exists(ct)
+        with open(ct, "a", encoding="utf-8") as f:
+            if new: f.write("\t".join(cols) + "\n")
+            f.write("\t".join(str(x) for x in row) + "\n")
+        print(f"Wrote {args.model}{suffix}.meta.json  (peak VRAM {total_vram} GB)  + config_table.tsv row")
 
 
 if __name__ == "__main__":
