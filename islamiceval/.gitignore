@@ -11,8 +11,9 @@ data/corpora/*
 !outputs/answers/concise_prompt/*.json
 !outputs/answers/explicit/*.json
 !outputs/answers/explicit_large_token_size/*.json
-!outputs/answers/vanilla_500/*.json
+!outputs/answers/vanilla_500/*
 !data/islamiceval2026_RELEASE/*.json
+
 
 # ignnore all .csv files
 *.csv
