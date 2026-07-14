@@ -36,8 +36,9 @@ LLAMA3_PROMPT_TEMPLATE = (
 MANUAL_TEMPLATES = {
     "jais-13b":             JAIS_PROMPT_TEMPLATE,
     "jais-70b":             JAIS_PROMPT_TEMPLATE,
+    "jais-30b":             JAIS_PROMPT_TEMPLATE,   # jais-family-30b ships no chat_template (verified)
     "acegpt-8b":            LLAMA3_PROMPT_TEMPLATE,
-    "acegpt-32b":           LLAMA3_PROMPT_TEMPLATE,
+    # NB: acegpt-32b DOES ship a chat_template (verified) -> uses apply_chat_template (not manual).
     "acegpt-70b":           LLAMA3_PROMPT_TEMPLATE,
     "deepseek-r1-llama-8b": LLAMA3_PROMPT_TEMPLATE,
 }
@@ -93,7 +94,8 @@ UNCAPPED_CTX = 32768   # context ceiling when budget is None (resolve_max_model_
 # All other models in MODELS are text-only — don't pass this param to them.
 MULTIMODAL_MODELS = {"gemma-3-4b", "gemma-3-12b", "gemma-3-27b",
                      "gemma-4-e4b", "gemma-4-12b", "gemma-4-26b-a4b", "gemma-4-31b",
-                     "llama-4-scout", "llama-4-maverick"}
+                     "llama-4-scout", "llama-4-maverick",
+                     "ministral-3-14b", "qwen3.5-27b"}   # 2026 multimodal -> text path (skip image profiling)
 
 SYSTEM_PROMPT = (
     "أنت مساعد إسلامي متخصص. أجب على السؤال بشكل دقيق ومختصر، "
@@ -106,12 +108,32 @@ ALT_PROMPT_2025 = "أجب عن السؤال التالي و استشهد بآي�
 
 ALT_PROMPT_2025_explicit = "أجب عن السؤال التالي و استشهد بآيات من القرآن الكريم و احاديث شريفة عند الاستشهاد بآية قرآنية، اذكر اسم السورة ورقم الآية. عند الاستشهاد بحديث، اذكر المصدر (البخاري، مسلم، إلخ)"
 
+VANILLA_PROMPT = "أجب عن السؤال التالي."
+
 # Selectable system prompts (choose via --prompt; non-default writes to <model>_<prompt>.json).
 PROMPTS = {
     "default":          SYSTEM_PROMPT,
     "alt2025":          ALT_PROMPT_2025,
     "alt2025-explicit": ALT_PROMPT_2025_explicit,
+    "vanilla":          VANILLA_PROMPT,
 }
+
+# Set by --allow-thinking: skip the thinking-disabling kwargs so native-thinking models reason
+# (matches inference_hugging_face.py; <think> blocks are split into a separate 'thinking' field).
+ALLOW_THINKING = False
+
+
+import re as _re_ar
+_AR_RE = _re_ar.compile(r'[؀-ۿ]')
+def is_degenerate(a: str) -> bool:
+    """Smoke guard shared with the HF path: flag empty/degenerate output."""
+    a = (a or "").strip()
+    if not a or a.startswith("ERROR") or len(a) < 5:  return True
+    letters = [c for c in a if c.isalpha()]
+    if letters and sum(1 for c in letters if _AR_RE.match(c)) / len(letters) < 0.3: return True
+    toks = a.split()
+    if len(toks) >= 8 and len(set(toks)) <= 2:        return True
+    return False
 
 # Sampling fallbacks for models whose generation_config doesn't enable sampling.
 DEFAULT_TEMPERATURE = 0.7
@@ -247,6 +269,12 @@ MODELS = {
     "qwen3-235b":            "Qwen/Qwen3-235B-A22B",                     # MoE, 22B active
     "llama-4-maverick":      "meta-llama/Llama-4-Maverick-17B-128E-Instruct",  # MoE
     "deepseek-v3":           "deepseek-ai/DeepSeek-V3-0324",             # 685B MoE, 37B active
+
+    # ==== Larger 2026 additions (fanar-2-27b / gemma-4-31b / qwen3.5-27b / acegpt-32b already above) ====
+    "ministral-3-14b":       "mistralai/Ministral-3-14B-Instruct-2512-BF16",  # multimodal->text
+    "karnak-40b":            "Applied-Innovation-Center/Karnak-40B-v1.0",     # Qwen3-MoE arch
+    "falcon-h1-34b":         "tiiuae/Falcon-H1-34B-Instruct",                 # hybrid Mamba+attn
+    "jais-30b":              "inceptionai/jais-family-30b-16k-chat",          # gated; custom; manual template
 }
 
 islamic_eval_models = ["allam-7b", "jais-13b", "acegpt-8b", "silma-9b", "fanar-1-9b", "qwen3-8b", "gemma-3-12b", "mistral-7b", "deepseek-r1-llama-8b", "llama-3.1-8b"]
@@ -316,7 +344,26 @@ def main():
                              "Dynamo 'graph break' (e.g. Gemma 4 on Turing/sm_75).")
     parser.add_argument("--prompt", choices=list(PROMPTS), default="alt2025-explicit",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
+    # --- parity with inference_hugging_face.py ---
+    parser.add_argument("--allow-thinking", action="store_true",
+                        help="Let native-thinking models reason; split <think> into a 'thinking' field.")
+    parser.add_argument("--seed", type=int, default=42, help="Global + sampling seed (reproducibility).")
+    parser.add_argument("--dtype", default="auto",
+                        help="vLLM dtype: auto (native) | float16 | bfloat16.")
+    parser.add_argument("--emit-meta", action="store_true",
+                        help="Write <model>_<prompt>.meta.json (resolved gen config, dtype, tp, backend, "
+                             "seed, peak VRAM) and append to config_table.tsv.")
+    parser.add_argument("--print-first-prompt", action="store_true",
+                        help="Print the fully rendered first prompt (leak check).")
+    parser.add_argument("--smoke", type=int, default=None,
+                        help="Smoke test: generate only the first N prompts, check for degenerate "
+                             "output; exit 0 (clean) / 2 (degenerate). No full run.")
     args = parser.parse_args()
+
+    from transformers import set_seed
+    set_seed(args.seed)
+    global ALLOW_THINKING
+    ALLOW_THINKING = args.allow_thinking
 
     prompts = load_prompts(args.input)
     if args.limit:
@@ -342,7 +389,7 @@ def main():
         model=model_id,
         tensor_parallel_size=args.tensor_parallel,
         trust_remote_code=True,
-        dtype="auto",
+        dtype=args.dtype,                          # auto=native; float16 for the Gemma-family speedup
         max_model_len=max_len,
         gpu_memory_utilization=0.70,
         # Turing (RTX 8000, sm_75): avoid FlashInfer (uninstalled; can't JIT here) and
@@ -364,7 +411,7 @@ def main():
     tokenizer = llm.get_tokenizer()
 
     sampling = SamplingParams(temperature=temperature, top_p=top_p,
-                              max_tokens=eff_max_tokens)
+                              max_tokens=eff_max_tokens, seed=args.seed)
 
     # Prompt + output must fit in max_len; leave room for the output. Over-long prompts
     # (e.g. jais-13b's 2048 ctx) are left-truncated below, keeping the tail (assistant cue /
@@ -385,7 +432,7 @@ def main():
             {"role": "user",   "content": item["prompt"]},
         ]
 
-    extra_template_kwargs = THINKING_KWARGS.get(args.model, {})
+    extra_template_kwargs = {} if ALLOW_THINKING else THINKING_KWARGS.get(args.model, {})
 
     conversations = []
     n_truncated = 0
@@ -425,6 +472,31 @@ def main():
             text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
         return text.strip()
 
+    def mk_entry(item, text):
+        a = clean(text)
+        e = {"id": item["id"], "prompt": item["prompt"], "answer": a, "model": args.model}
+        if "</think>" in a:                      # thinking model: keep reasoning separate
+            think, _, ans = a.partition("</think>")
+            e["thinking"] = think.replace("<think>", "").strip()
+            e["answer"] = ans.strip()
+        return e
+
+    if args.print_first_prompt and valid_convs:
+        print("=" * 70 + f"\nFIRST RENDERED PROMPT ({args.model}):\n" + "-" * 70)
+        print(valid_convs[0])
+        print("=" * 70)
+
+    # ---- smoke test: first N prompts, flag degenerate output, then exit ----
+    if args.smoke:
+        outs = llm.generate(valid_convs[:args.smoke], sampling)
+        bad = 0
+        for i, (p, o) in enumerate(zip(valid_prompts[:args.smoke], outs)):
+            a = clean(o.outputs[0].text); deg = is_degenerate(a); bad += deg
+            print(f"\n[smoke {i} · {'DEGENERATE' if deg else 'ok'}] {p['id']}\n{a[:300]}")
+        ok = bad == 0
+        print(f"\nSMOKE {'PASS' if ok else 'FAIL'} — {bad}/{len(outs)} degenerate for {args.model}")
+        import sys as _sys; _sys.exit(0 if ok else 2)
+
     os.makedirs(args.output_dir, exist_ok=True)
     suffix = "" if args.prompt == "default" else f"_{args.prompt}"
     out_path = os.path.join(args.output_dir, f"{args.model}{suffix}.json")
@@ -454,20 +526,45 @@ def main():
         convs_b   = valid_convs[start:start + args.batch_size]
         prompts_b = valid_prompts[start:start + args.batch_size]
         outputs = llm.generate(convs_b, sampling)
-        results.extend(
-            {
-                "id":     item["id"],
-                "prompt": item["prompt"],
-                "answer": clean(out.outputs[0].text),
-                "model":  args.model,
-            }
-            for item, out in zip(prompts_b, outputs)
-        )
+        results.extend(mk_entry(item, out.outputs[0].text)
+                       for item, out in zip(prompts_b, outputs))
         save(results)
         print(f"  checkpoint: {min(start + args.batch_size, total)}/{total} done "
               f"-> {out_path} ({len(results)} total)")
 
     print(f"Saved {len(results)} answers -> {out_path}")
+
+    # ---- sidecar metadata + aggregate config table (parity with the HF path) ----
+    if args.emit_meta:
+        try:
+            import torch
+            peak = {f"cuda:{d}": round(torch.cuda.max_memory_allocated(d) / 1e9, 2)
+                    for d in range(torch.cuda.device_count())}
+        except Exception:
+            peak = {}
+        total_vram = round(sum(peak.values()), 2)
+        meta = {
+            "model": args.model, "model_id": model_id, "engine": "vllm",
+            "dtype": args.dtype, "tensor_parallel": args.tensor_parallel,
+            "attention_backend": args.attention_backend, "gpu_memory_utilization": 0.70,
+            "seed": args.seed, "prompt": args.prompt, "allow_thinking": ALLOW_THINKING,
+            "gen_config": {"do_sample": temperature > 0, "temperature": temperature,
+                           "top_p": top_p, "max_tokens": eff_max_tokens},
+            "peak_vram_gb": peak, "peak_vram_total_gb": total_vram, "n_answers": len(results),
+        }
+        with open(os.path.join(args.output_dir, f"{args.model}{suffix}.meta.json"), "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False, indent=2)
+        ct = os.path.join(args.output_dir, "config_table.tsv")
+        cols = ["model", "model_id", "engine", "dtype", "attn", "seed", "do_sample", "temperature",
+                "top_p", "top_k", "thinking", "max_tokens", "peak_vram_total_gb", "n_answers"]
+        row = [args.model, model_id, "vllm", args.dtype, args.attention_backend, args.seed,
+               temperature > 0, temperature, top_p, "", ALLOW_THINKING, eff_max_tokens,
+               total_vram, len(results)]
+        new = not os.path.exists(ct)
+        with open(ct, "a", encoding="utf-8") as f:
+            if new: f.write("\t".join(cols) + "\n")
+            f.write("\t".join(str(x) for x in row) + "\n")
+        print(f"Wrote {args.model}{suffix}.meta.json  + config_table.tsv row")
 
 
 if __name__ == "__main__":

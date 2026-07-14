@@ -278,18 +278,36 @@ def load_model(model_id: str, quantize: bool = True, dtype=torch.float16, attn="
     # dtype: pass explicitly (else from_pretrained loads fp32 -> CPU-offload). device_map="auto"
     # shards across all VISIBLE GPUs (caller sets CUDA_VISIBLE_DEVICES). attn: "sdpa" is the
     # only fast attention on Turing/sm_75 (no FlashAttention); "auto" leaves it to transformers.
-    def _load(dkey):
+    def _load(cls, dkey):
         kw = dict(quantization_config=bnb_config, device_map="auto", trust_remote_code=True)
         if not quantize:
             kw[dkey] = dtype
         if attn and attn != "auto":
             kw["attn_implementation"] = attn
-        return AutoModelForCausalLM.from_pretrained(model_id, **kw)
+        return cls.from_pretrained(model_id, **kw)
+    # Multimodal checkpoints ship a *ForConditionalGeneration config that AutoModelForCausalLM
+    # rejects ("Unrecognized configuration") — fall back to the image-text-to-text auto class,
+    # which generates text fine from text-only input_ids (no pixel inputs). Text models load first.
+    classes = [AutoModelForCausalLM]
     try:
-        model = _load("dtype")                    # transformers v5 arg name
-    except TypeError:                             # older transformers: torch_dtype
-        model = _load("torch_dtype")
-    return tokenizer, model
+        from transformers import AutoModelForImageTextToText
+        classes.append(AutoModelForImageTextToText)
+    except Exception:
+        pass
+    last = None
+    for cls in classes:
+        try:
+            try:
+                return tokenizer, _load(cls, "dtype")       # transformers v5 arg name
+            except TypeError:                               # older transformers: torch_dtype
+                return tokenizer, _load(cls, "torch_dtype")
+        except ValueError as e:
+            last = e
+            if "Unrecognized configuration" in str(e):
+                print(f"  [load] {cls.__name__} rejected this config; trying the next auto-class…")
+                continue
+            raise
+    raise last
 
 
 def build_messages(prompt: str, model_key: str) -> list:
@@ -559,9 +577,9 @@ def main():
         with open(os.path.join(args.output_dir, f"{args.model}{suffix}.meta.json"), "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False, indent=2)
         ct = os.path.join(args.output_dir, "config_table.tsv")
-        cols = ["model", "model_id", "dtype", "attn", "seed", "do_sample", "temperature", "top_p",
-                "top_k", "thinking", "max_tokens", "peak_vram_total_gb", "n_answers"]
-        row = [args.model, model_id, meta["dtype"], args.attn, args.seed, gen["do_sample"],
+        cols = ["model", "model_id", "engine", "dtype", "attn", "seed", "do_sample", "temperature",
+                "top_p", "top_k", "thinking", "max_tokens", "peak_vram_total_gb", "n_answers"]
+        row = [args.model, model_id, "hf", meta["dtype"], args.attn, args.seed, gen["do_sample"],
                gen["temperature"], gen["top_p"], gen["top_k"], ALLOW_THINKING, args.max_tokens,
                total_vram, len(results)]
         new = not os.path.exists(ct)
