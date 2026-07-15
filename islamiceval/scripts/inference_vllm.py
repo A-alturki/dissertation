@@ -342,6 +342,12 @@ def main():
     parser.add_argument("--enforce-eager", action="store_true",
                         help="Disable torch.compile/CUDA graphs. Use if engine init fails with a "
                              "Dynamo 'graph break' (e.g. Gemma 4 on Turing/sm_75).")
+    parser.add_argument("--gpu-memory-utilization", type=float, default=0.70,
+                        help="Fraction of GPU memory for weights+KV. Raise (e.g. 0.90) for large "
+                             "models that fail with 'No available memory for the cache blocks' / OOM.")
+    parser.add_argument("--max-num-seqs", type=int, default=None,
+                        help="Cap concurrent sequences (vLLM default 256). Lower it (e.g. 128) for "
+                             "Mamba/hybrid models that fail 'max_num_seqs exceeds Mamba cache blocks'.")
     parser.add_argument("--prompt", choices=list(PROMPTS), default="alt2025-explicit",
                         help="System prompt to use. Non-default writes to <model>_<prompt>.json")
     # --- parity with inference_hugging_face.py ---
@@ -391,7 +397,7 @@ def main():
         trust_remote_code=True,
         dtype=args.dtype,                          # auto=native; float16 for the Gemma-family speedup
         max_model_len=max_len,
-        gpu_memory_utilization=0.70,
+        gpu_memory_utilization=args.gpu_memory_utilization,
         # Turing (RTX 8000, sm_75): avoid FlashInfer (uninstalled; can't JIT here) and
         # FLASH_ATTN (needs sm_80+). Default TRITON_ATTN; Gemma (head_dim=256) overflows
         # Triton's shared mem, so it needs FLEX_ATTENTION/TORCH_SDPA via --attention-backend.
@@ -401,6 +407,8 @@ def main():
         # Disable torch.compile / CUDA graphs — avoids Dynamo "graph break" failures at
         # engine init (e.g. Gemma 4 on Turing/sm_75). Slower, but robust.
         llm_kwargs["enforce_eager"] = True
+    if args.max_num_seqs is not None:
+        llm_kwargs["max_num_seqs"] = args.max_num_seqs
     if args.model in MULTIMODAL_MODELS:
         llm_kwargs["limit_mm_per_prompt"] = {"image": 0}
     if args.model in TOKENIZER_OVERRIDE:
@@ -546,7 +554,8 @@ def main():
         meta = {
             "model": args.model, "model_id": model_id, "engine": "vllm",
             "dtype": args.dtype, "tensor_parallel": args.tensor_parallel,
-            "attention_backend": args.attention_backend, "gpu_memory_utilization": 0.70,
+            "attention_backend": args.attention_backend,
+            "gpu_memory_utilization": args.gpu_memory_utilization, "max_num_seqs": args.max_num_seqs,
             "seed": args.seed, "prompt": args.prompt, "allow_thinking": ALLOW_THINKING,
             "gen_config": {"do_sample": temperature > 0, "temperature": temperature,
                            "top_p": top_p, "max_tokens": eff_max_tokens},

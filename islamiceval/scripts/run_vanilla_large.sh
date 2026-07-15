@@ -56,6 +56,16 @@ budget() {  # thinking-capable vLLM models get room; slow HF-Gemma pair is cappe
     *)                       echo 3000;;
   esac
 }
+
+# ---- per-model crash fixes (added 2026-07-15 after the first big run) ----
+# vLLM memory/cache knobs: raise gpu-mem-util for large models that hit
+# 'No available memory for the cache blocks' / OOM; lower max-num-seqs for
+# Mamba/hybrid models that hit 'max_num_seqs exceeds Mamba cache blocks'.
+declare -A GPU_UTIL=( [qwen3.5-27b]=0.85 [falcon-h1-34b]=0.90 [karnak-40b]=0.92 )
+declare -A MAX_SEQS=( [qwen3.5-27b]=128  [falcon-h1-34b]=64   [karnak-40b]=32   )
+# HF Gemma-family: fp16 overflows Gemma's logit soft-cap -> inf/nan device-side
+# assert (fanar-2-27b crashed). 'native' reads the repo torch_dtype = bf16.
+declare -A HF_DTYPE=( [fanar-2-27b]=native [gemma-4-31b]=native )
 HF_HUB="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 
 is_done() {
@@ -81,12 +91,16 @@ build_cmd() {  # $1=model $2=engine $3=maxtok ; extra args ($4..) appended
   local m="$1" eng="$2" mt="$3"; shift 3
   if [ "$eng" = "vllm" ]; then
     # fp16 (not auto/bf16): Turing sm_75 has no fast bf16; these 6 are non-Gemma (fp16-safe).
+    local extra=()
+    [ -n "${GPU_UTIL[$m]:-}" ] && extra+=(--gpu-memory-utilization "${GPU_UTIL[$m]}")
+    [ -n "${MAX_SEQS[$m]:-}" ] && extra+=(--max-num-seqs "${MAX_SEQS[$m]}")
     REPLY_CMD=("$PY" inference_vllm.py --model "$m" --input "$INPUT" --output-dir "$OUTDIR"
                --prompt "$PROMPT" --allow-thinking --seed 42 --dtype float16
-               --tensor-parallel 2 --max-tokens "$mt" "$@")
-  else   # hf, fp16, both GPUs via device_map=auto
+               --tensor-parallel 2 --max-tokens "$mt" "${extra[@]}" "$@")
+  else   # hf, both GPUs via device_map=auto; Gemma-family -> native(bf16), else fp16
+    local dt="${HF_DTYPE[$m]:-fp16}"
     REPLY_CMD=("$PY" inference_hugging_face.py --model "$m" --input "$INPUT" --output-dir "$OUTDIR"
-               --prompt "$PROMPT" --allow-thinking --no-quantize --dtype fp16 --attn sdpa
+               --prompt "$PROMPT" --allow-thinking --no-quantize --dtype "$dt" --attn sdpa
                --seed 42 --batch-size 8 --max-tokens "$mt" "$@")
   fi
 }
