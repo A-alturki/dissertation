@@ -1,0 +1,43 @@
+System prompt: vanilla  |  allow_thinking=True
+Loaded 500 prompts from ../data/islamiceval2026_RELEASE/batch1_500_questions.json
+Loading fanar-2-27b (QCRI/Fanar-2-27B-Instruct)  quantize=False  dtype=torch.float16  attn=sdpa
+Fetching 11 files:   0%|          | 0/11 [00:00<?, ?it/s]Fetching 11 files:   9%|▉         | 1/11 [05:01<50:10, 301.04s/it]Fetching 11 files:  18%|█▊        | 2/11 [05:03<18:48, 125.43s/it]Fetching 11 files:  82%|████████▏ | 9/11 [05:50<00:47, 23.95s/it] Fetching 11 files:  91%|█████████ | 10/11 [06:40<00:27, 27.88s/it]Fetching 11 files: 100%|██████████| 11/11 [06:43<00:00, 23.48s/it]Fetching 11 files: 100%|██████████| 11/11 [06:43<00:00, 36.69s/it]
+Loading weights:   0%|          | 0/808 [00:00<?, ?it/s]Loading weights:   0%|          | 1/808 [00:00<10:46,  1.25it/s]Loading weights:   2%|▏         | 16/808 [00:00<00:33, 23.66it/s]Loading weights:   4%|▎         | 29/808 [00:01<00:21, 36.13it/s]Loading weights:   5%|▌         | 42/808 [00:01<00:18, 41.92it/s]Loading weights:   7%|▋         | 55/808 [00:01<00:15, 50.15it/s]Loading weights:   8%|▊         | 68/808 [00:01<00:11, 63.57it/s]Loading weights:  10%|█         | 81/808 [00:01<00:10, 66.23it/s]Loading weights:  12%|█▏        | 94/808 [00:02<00:10, 66.59it/s]Loading weights:  13%|█▎        | 107/808 [00:02<00:10, 65.94it/s]Loading weights:  15%|█▍        | 120/808 [00:02<00:09, 71.47it/s]Loading weights:  16%|█▋        | 133/808 [00:02<00:09, 69.03it/s]Loading weights:  18%|█▊        | 146/808 [00:02<00:08, 76.28it/s]Loading weights:  20%|█▉        | 159/808 [00:02<00:08, 74.81it/s]Loading weights:  21%|██        | 167/808 [00:02<00:08, 75.47it/s]Loading weights:  22%|██▏       | 175/808 [00:03<00:09, 66.86it/s]Loading weights:  23%|██▎       | 186/808 [00:03<00:08, 72.22it/s]Loading weights:  25%|██▍       | 198/808 [00:03<00:08, 72.43it/s]Loading weights:  26%|██▌       | 211/808 [00:03<00:07, 78.17it/s]Loading weights:  28%|██▊       | 224/808 [00:03<00:07, 76.78it/s]Loading weights:  29%|██▉       | 237/808 [00:03<00:07, 73.82it/s]Loading weights:  31%|███       | 250/808 [00:04<00:08, 65.67it/s]Loading weights:  33%|███▎      | 264/808 [00:04<00:07, 73.59it/s]Loading weights:  34%|███▍      | 276/808 [00:04<00:07, 71.45it/s]Loading weights:  36%|███▌      | 289/808 [00:04<00:07, 73.32it/s]Loading weights:  37%|███▋      | 302/808 [00:04<00:06, 80.36it/s]Loading weights:  39%|███▉      | 315/808 [00:04<00:06, 76.81it/s]Loading weights:  41%|████      | 328/808 [00:05<00:06, 72.29it/s]Loading weights:  42%|████▏     | 341/808 [00:05<00:05, 78.51it/s]Loading weights:  44%|████▍     | 354/808 [00:05<00:05, 78.24it/s]Loading weights:  45%|████▌     | 367/808 [00:05<00:05, 76.95it/s]Loading weights:  47%|████▋     | 380/808 [00:05<00:05, 79.80it/s]Loading weights:  49%|████▊     | 393/808 [00:05<00:05, 78.95it/s]Loading weights:  50%|█████     | 406/808 [00:06<00:05, 79.07it/s]Loading weights:  52%|█████▏    | 419/808 [00:06<00:05, 74.57it/s]Loading weights:  53%|█████▎    | 432/808 [00:06<00:04, 75.21it/s]Loading weights:  55%|█████▌    | 445/808 [00:06<00:04, 81.65it/s]Loading weights:  57%|█████▋    | 458/808 [00:06<00:04, 80.65it/s]Loading weights:  58%|█████▊    | 471/808 [00:06<00:04, 76.63it/s]Loading weights:  60%|█████▉    | 484/808 [00:07<00:04, 80.57it/s]Loading weights:  62%|██████▏   | 497/808 [00:07<00:03, 79.71it/s]Loading weights:  63%|██████▎   | 510/808 [00:07<00:03, 79.35it/s]Loading weights:  65%|██████▍   | 523/808 [00:07<00:03, 73.15it/s]Loading weights:  66%|██████▋   | 536/808 [00:07<00:03, 80.95it/s]Loading weights:  68%|██████▊   | 549/808 [00:07<00:03, 78.15it/s]Loading weights:  70%|██████▉   | 562/808 [00:08<00:03, 77.63it/s]Loading weights:  71%|███████   | 575/808 [00:08<00:03, 70.26it/s]Loading weights:  73%|███████▎  | 588/808 [00:08<00:03, 64.03it/s]Loading weights:  74%|███████▍  | 601/808 [00:08<00:02, 75.46it/s]Loading weights:  76%|███████▌  | 614/808 [00:08<00:02, 73.59it/s]Loading weights:  77%|███████▋  | 626/808 [00:09<00:02, 82.64it/s]Loading weights:  79%|███████▊  | 636/808 [00:09<00:02, 70.79it/s]Loading weights:  80%|███████▉  | 644/808 [00:09<00:02, 60.63it/s]Loading weights:  81%|████████  | 653/808 [00:09<00:02, 56.47it/s]Loading weights:  82%|████████▏ | 666/808 [00:09<00:02, 69.72it/s]Loading weights:  83%|████████▎ | 674/808 [00:09<00:01, 70.60it/s]Loading weights:  84%|████████▍ | 682/808 [00:09<00:01, 64.18it/s]Loading weights:  86%|████████▌ | 692/808 [00:10<00:01, 60.90it/s]Loading weights:  87%|████████▋ | 705/808 [00:10<00:01, 70.24it/s]Loading weights:  89%|████████▉ | 718/808 [00:10<00:01, 69.52it/s]Loading weights:  90%|█████████ | 731/808 [00:10<00:01, 75.89it/s]Loading weights:  92%|█████████▏| 744/808 [00:10<00:00, 67.01it/s]Loading weights:  94%|█████████▎| 757/808 [00:11<00:00, 64.32it/s]Loading weights:  95%|█████████▌| 770/808 [00:11<00:00, 76.07it/s]Loading weights:  97%|█████████▋| 783/808 [00:11<00:00, 69.89it/s]Loading weights:  99%|█████████▊| 796/808 [00:11<00:00, 75.46it/s]Loading weights: 100%|██████████| 808/808 [00:11<00:00, 69.47it/s]
+/pytorch/aten/src/ATen/native/cuda/TensorCompare.cu:109: _assert_async_cuda_kernel: block: [0,0,0], thread: [0,0,0] Assertion `probability tensor contains either `inf`, `nan` or element < 0` failed.
+Model loaded.
+Resolved generation config (creator-default): {'do_sample': True, 'temperature': 0.7, 'top_p': 0.9, 'top_k': None}
+======================================================================
+FIRST RENDERED PROMPT (fanar-2-27b):
+----------------------------------------------------------------------
+<bos>أجب عن السؤال التالي.<start_of_turn>user
+فعل عادة سریة لزوج أو زوجة حرام؟<end_of_turn>
+<start_of_turn>model
+
+======================================================================
+Traceback (most recent call last):
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 593, in <module>
+    main()
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 504, in main
+    ans = generate_with_retry([c["prompt"] for c in sm], tokenizer, model,
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 328, in generate_with_retry
+    return generate_batch(prompts, tokenizer, model, model_key, max_new_tokens, temperature, top_p)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 364, in generate_batch
+    output = model.generate(
+             ^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/generation/utils.py", line 2582, in generate
+    result = decoding_method(
+             ^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/generation/utils.py", line 2837, in _sample
+    next_tokens = torch.multinomial(probs, num_samples=1).squeeze(1)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.AcceleratorError: CUDA error: device-side assert triggered
+Search for `cudaErrorAssert' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
