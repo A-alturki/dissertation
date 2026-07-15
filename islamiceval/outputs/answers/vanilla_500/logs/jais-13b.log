@@ -1,0 +1,34 @@
+[transformers] A new version of the following files was downloaded from https://huggingface.co/inceptionai/jais-13b-chat:
+- configuration_jais.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+[transformers] A new version of the following files was downloaded from https://huggingface.co/inceptionai/jais-13b-chat:
+- modeling_jais.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+System prompt: vanilla  |  allow_thinking=True
+Loaded 500 prompts from ../data/islamiceval2026_RELEASE/batch1_500_questions.json
+Loading jais-13b (inceptionai/jais-13b-chat)  quantize=False  dtype=torch.float16  attn=auto
+Traceback (most recent call last):
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 593, in <module>
+    main()
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 473, in main
+    tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype, attn=args.attn)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 301, in load_model
+    return tokenizer, _load(cls, "dtype")       # transformers v5 arg name
+                      ^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 287, in _load
+    return cls.from_pretrained(model_id, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 378, in from_pretrained
+    model_class = get_class_from_dynamic_module(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/dynamic_module_utils.py", line 623, in get_class_from_dynamic_module
+    return get_class_in_module(class_name, final_module, force_reload=force_download)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/dynamic_module_utils.py", line 309, in get_class_in_module
+    module_spec.loader.exec_module(module)
+  File "<frozen importlib._bootstrap_external>", line 995, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/mnt/raid1/ws/aalturki/huggingface_cache/modules/transformers_modules/inceptionai/jais_hyphen_13b_hyphen_chat/da77b5e603b74c5f7866cb6a488dd24e0cb7ffa7/modeling_jais.py", line 38, in <module>
+    from transformers.pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+ImportError: cannot import name 'find_pruneable_heads_and_indices' from 'transformers.pytorch_utils' (/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/pytorch_utils.py)

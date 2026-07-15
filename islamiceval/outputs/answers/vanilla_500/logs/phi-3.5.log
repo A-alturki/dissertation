@@ -1,0 +1,64 @@
+[transformers] A new version of the following files was downloaded from https://huggingface.co/microsoft/Phi-3.5-mini-instruct:
+- configuration_phi3.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+[transformers] This model config has set a `rope_parameters['original_max_position_embeddings']` field, to be used together with `max_position_embeddings` to determine a scaling factor. Please set the `factor` field of `rope_parameters`with this ratio instead -- we recommend the use of this field over `original_max_position_embeddings`, as it is compatible with most model architectures.
+[transformers] A new version of the following files was downloaded from https://huggingface.co/microsoft/Phi-3.5-mini-instruct:
+- modeling_phi3.py
+. Make sure to double-check they do not contain any added malicious code. To avoid downloading new versions of the code file, you can pin a revision.
+`flash-attention` package not found, consider installing for better performance: No module named 'flash_attn'.
+Current `flash-attention` does not support `window_size`. Either upgrade or use `attn_implementation='eager'`.
+System prompt: vanilla  |  allow_thinking=True
+Loaded 500 prompts from ../data/islamiceval2026_RELEASE/batch1_500_questions.json
+Loading phi-3.5 (microsoft/Phi-3.5-mini-instruct)  quantize=False  dtype=torch.float16  attn=auto
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]Cancellation requested; stopping current tasks.
+Fetching 2 files:   0%|          | 0/2 [00:00<?, ?it/s]
+Traceback (most recent call last):
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 593, in <module>
+    main()
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 473, in main
+    tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype, attn=args.attn)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 301, in load_model
+    return tokenizer, _load(cls, "dtype")       # transformers v5 arg name
+                      ^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 287, in _load
+    return cls.from_pretrained(model_id, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 389, in from_pretrained
+    return model_class.from_pretrained(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 4216, in from_pretrained
+    checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/modeling_utils.py", line 797, in _get_resolved_checkpoint_files
+    checkpoint_files, sharded_metadata = get_checkpoint_shard_files(
+                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/utils/hub.py", line 894, in get_checkpoint_shard_files
+    cached_filenames = cached_files(
+                       ^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/utils/hub.py", line 452, in cached_files
+    snapshot_download(
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/huggingface_hub/utils/_validators.py", line 88, in _inner_fn
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/huggingface_hub/_snapshot_download.py", line 454, in snapshot_download
+    thread_map(
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/tqdm/contrib/concurrent.py", line 69, in thread_map
+    return _executor_map(ThreadPoolExecutor, fn, *iterables, **tqdm_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/tqdm/contrib/concurrent.py", line 51, in _executor_map
+    return list(tqdm_class(ex.map(fn, *iterables, chunksize=chunksize), **kwargs))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/tqdm/std.py", line 1181, in __iter__
+    for obj in iterable:
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 619, in result_iterator
+    yield _result_or_cancel(fs.pop())
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 317, in _result_or_cancel
+    return fut.result(timeout)
+           ^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/concurrent/futures/_base.py", line 451, in result
+    self._condition.wait(timeout)
+  File "/usr/lib/python3.12/threading.py", line 355, in wait
+    waiter.acquire()
+KeyboardInterrupt
