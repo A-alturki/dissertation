@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 15, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
+Traceback (most recent call last):
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 15, in <module>
+    import torch
+ModuleNotFoundError: No module named 'torch'
