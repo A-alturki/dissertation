@@ -20,6 +20,15 @@
 # ==============================================================================
 set -u
 cd "$(dirname "$0")"                       # -> scripts/
+
+# Activate the project venv (vLLM 0.22 + transformers 5.10 live here, NOT system python3).
+VENV="$(cd .. && pwd)/venv"
+if [ -f "$VENV/bin/activate" ]; then
+  # shellcheck disable=SC1090
+  source "$VENV/bin/activate"
+else
+  echo "[WARN] venv not found at $VENV — using system python (vLLM may be missing)."
+fi
 PY="${PYTHON:-python3}"
 export CUDA_VISIBLE_DEVICES=3
 
