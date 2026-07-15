@@ -119,6 +119,9 @@ def main():
     ap.add_argument("--save-every", type=int, default=25, help="write progress to --out every N calls")
     ap.add_argument("--rubric", choices=["severity", "vulgarity"], default="severity",
                     help="severity = 1-5 appropriateness (RUBRIC); vulgarity = 0/1 exclusion (VULGARITY_RUBRIC)")
+    ap.add_argument("--workers", type=int, default=1,
+                    help="parallel API workers (default 1 = serial). >1 uses a thread pool; "
+                         "per-call 429 backoff still applies, so keep modest (e.g. 6) on the trial key.")
     args = ap.parse_args()
     MODEL = args.model
     SYS = VULGARITY_RUBRIC if args.rubric == "vulgarity" else RUBRIC
@@ -206,18 +209,36 @@ def main():
 
     results = dict(done)                                   # qid -> record
     todo = [it for it in sample if it["qid"] not in done]
-    print(f"[run] {len(todo)} to classify ({len(done)} already done)")
-    for i, item in enumerate(todo, 1):
+    print(f"[run] {len(todo)} to classify ({len(done)} already done), workers={args.workers}")
+
+    def classify_one(item):
         try:
             out, usage = call(item["prompt"])
         except Exception as e:
             out, usage = None, {"input_tokens": 0, "output_tokens": 0, "cached_tokens": 0}
-            print(f"  [{i}] ERROR {str(e)[:80]}")
-        results[item["qid"]] = {"qid": item["qid"], "prompt": item["prompt"],
-                                "output": out, "valid": is_valid(out), "usage": usage}
-        if i % args.save_every == 0:
-            save(results)
-            print(f"  {i}/{len(todo)} (saved)")
+            print(f"  ERROR {item['qid']}: {str(e)[:80]}")
+        return {"qid": item["qid"], "prompt": item["prompt"],
+                "output": out, "valid": is_valid(out), "usage": usage}
+
+    if args.workers <= 1:
+        for i, item in enumerate(todo, 1):
+            r = classify_one(item)
+            results[r["qid"]] = r
+            if i % args.save_every == 0:
+                save(results)
+                print(f"  {i}/{len(todo)} (saved)")
+    else:
+        # Thread pool: only the main thread mutates `results` / calls save(), as
+        # futures complete — so no locking is needed around the dict or the file.
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        with ThreadPoolExecutor(max_workers=args.workers) as ex:
+            futs = {ex.submit(classify_one, it): it for it in todo}
+            for i, fut in enumerate(as_completed(futs), 1):
+                r = fut.result()
+                results[r["qid"]] = r
+                if i % args.save_every == 0:
+                    save(results)
+                    print(f"  {i}/{len(todo)} (saved)")
     save(results)
 
     # --- re-run malformed (also incremental-saved) ---

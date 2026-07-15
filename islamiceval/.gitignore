@@ -9,6 +9,7 @@ data/corpora/*
 # samples, classification, etc.) is PC-side and regenerable.
 *.json
 !outputs/answers/vanilla_500/*
+!outputs/answers/ansari_test_500/*
 !data/islamiceval2026_RELEASE/*.json
 
 # ignnore all .csv files
