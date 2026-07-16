@@ -37,9 +37,13 @@ fi
 ORDER=(ministral-3-14b acegpt-32b qwen3.5-27b falcon-h1-34b karnak-40b jais-30b fanar-2-27b gemma-4-31b)
 # jais-30b -> HF: vLLM 0.22 can't build it ("'JAISConfig' object has no attribute
 # 'tie_word_embeddings'"); the HF path has a working manual ALiBi template for it.
+# qwen3.5-27b / falcon-h1-34b / karnak-40b -> HF (was vllm): on Turing/sm_75 (RTX 8000,
+# compute 7.5) vLLM HARD-rejects bf16 ("needs >=8.0"), and these three emit degenerate
+# output in fp16 -> vLLM is a dead end for them. HF does bf16 (software-emulated, correct),
+# same path that made the Gemma pair work. Slow (pipeline-parallel); karnak-40b MoE may OOM.
 declare -A ENGINE=(
-  [ministral-3-14b]=vllm [acegpt-32b]=vllm [qwen3.5-27b]=vllm [falcon-h1-34b]=vllm
-  [karnak-40b]=vllm [jais-30b]=hf [fanar-2-27b]=hf [gemma-4-31b]=hf
+  [ministral-3-14b]=vllm [acegpt-32b]=vllm [qwen3.5-27b]=hf [falcon-h1-34b]=hf
+  [karnak-40b]=hf [jais-30b]=hf [fanar-2-27b]=hf [gemma-4-31b]=hf
 )
 declare -A REPO=(
   [ministral-3-14b]="mistralai/Ministral-3-14B-Instruct-2512-BF16"
@@ -65,13 +69,17 @@ budget() {  # thinking-capable vLLM models get room; slow HF-Gemma pair is cappe
 # Mamba/hybrid models that hit 'max_num_seqs exceeds Mamba cache blocks'.
 declare -A GPU_UTIL=( [qwen3.5-27b]=0.85 [falcon-h1-34b]=0.90 [karnak-40b]=0.92 )
 declare -A MAX_SEQS=( [qwen3.5-27b]=128  [falcon-h1-34b]=64   [karnak-40b]=32   )
-# vLLM dtype override -> bf16 for the models that LOADED but produced degenerate
-# (NaN/repetition) fp16 smoke output. Confirmed by contrast: fanar-2-27b passed on
-# bf16 while these three failed 3/3 on fp16. bf16 works on Turing (slower, correct).
-declare -A VLLM_DTYPE=( [qwen3.5-27b]=bfloat16 [falcon-h1-34b]=bfloat16 [karnak-40b]=bfloat16 )
-# HF Gemma-family: fp16 overflows Gemma's logit soft-cap -> inf/nan device-side
-# assert (fanar-2-27b crashed). 'native' reads the repo torch_dtype = bf16.
-declare -A HF_DTYPE=( [fanar-2-27b]=native [gemma-4-31b]=native )
+# vLLM dtype override (vllm-branch only). NB bf16 is IMPOSSIBLE on Turing/sm_75 in vLLM
+# (compute 7.5 < 8.0) -> the three ex-vllm models that needed bf16 were moved to HF above;
+# nothing left here needs an override (the remaining vLLM pair is fp16-safe).
+declare -A VLLM_DTYPE=()
+# HF dtype = 'native' (repo torch_dtype = bf16). Needed for: Gemma-family (fp16 overflows
+# the logit soft-cap -> inf/nan) AND the three ex-vllm hybrids (fp16 = degenerate).
+declare -A HF_DTYPE=( [fanar-2-27b]=native [gemma-4-31b]=native
+  [qwen3.5-27b]=native [falcon-h1-34b]=native [karnak-40b]=native )
+# HF batch size: shrink for the big bf16 models so device_map=auto doesn't OOM on 2x48GB
+# (40B MoE weights alone ~= 80GB). Default 8 for everything else.
+declare -A HF_BSZ=( [qwen3.5-27b]=4 [falcon-h1-34b]=2 [karnak-40b]=1 )
 HF_HUB="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 
 is_done() {
@@ -103,11 +111,11 @@ build_cmd() {  # $1=model $2=engine $3=maxtok ; extra args ($4..) appended
     REPLY_CMD=("$PY" inference_vllm.py --model "$m" --input "$INPUT" --output-dir "$OUTDIR"
                --prompt "$PROMPT" --allow-thinking --seed 42 --dtype "$vdt"
                --tensor-parallel 2 --max-tokens "$mt" "${extra[@]}" "$@")
-  else   # hf, both GPUs via device_map=auto; Gemma-family -> native(bf16), else fp16
-    local dt="${HF_DTYPE[$m]:-fp16}"
+  else   # hf, both GPUs via device_map=auto; Gemma-family + ex-vllm hybrids -> native(bf16)
+    local dt="${HF_DTYPE[$m]:-fp16}" bsz="${HF_BSZ[$m]:-8}"
     REPLY_CMD=("$PY" inference_hugging_face.py --model "$m" --input "$INPUT" --output-dir "$OUTDIR"
                --prompt "$PROMPT" --allow-thinking --no-quantize --dtype "$dt" --attn sdpa
-               --seed 42 --batch-size 8 --max-tokens "$mt" "$@")
+               --seed 42 --batch-size "$bsz" --max-tokens "$mt" "$@")
   fi
 }
 
