@@ -35,9 +35,11 @@ fi
 
 # order: fast vLLM models first (results early), slow Gemma HF-fp16 pair last.
 ORDER=(ministral-3-14b acegpt-32b qwen3.5-27b falcon-h1-34b karnak-40b jais-30b fanar-2-27b gemma-4-31b)
+# jais-30b -> HF: vLLM 0.22 can't build it ("'JAISConfig' object has no attribute
+# 'tie_word_embeddings'"); the HF path has a working manual ALiBi template for it.
 declare -A ENGINE=(
   [ministral-3-14b]=vllm [acegpt-32b]=vllm [qwen3.5-27b]=vllm [falcon-h1-34b]=vllm
-  [karnak-40b]=vllm [jais-30b]=vllm [fanar-2-27b]=hf [gemma-4-31b]=hf
+  [karnak-40b]=vllm [jais-30b]=hf [fanar-2-27b]=hf [gemma-4-31b]=hf
 )
 declare -A REPO=(
   [ministral-3-14b]="mistralai/Ministral-3-14B-Instruct-2512-BF16"
@@ -63,6 +65,10 @@ budget() {  # thinking-capable vLLM models get room; slow HF-Gemma pair is cappe
 # Mamba/hybrid models that hit 'max_num_seqs exceeds Mamba cache blocks'.
 declare -A GPU_UTIL=( [qwen3.5-27b]=0.85 [falcon-h1-34b]=0.90 [karnak-40b]=0.92 )
 declare -A MAX_SEQS=( [qwen3.5-27b]=128  [falcon-h1-34b]=64   [karnak-40b]=32   )
+# vLLM dtype override -> bf16 for the models that LOADED but produced degenerate
+# (NaN/repetition) fp16 smoke output. Confirmed by contrast: fanar-2-27b passed on
+# bf16 while these three failed 3/3 on fp16. bf16 works on Turing (slower, correct).
+declare -A VLLM_DTYPE=( [qwen3.5-27b]=bfloat16 [falcon-h1-34b]=bfloat16 [karnak-40b]=bfloat16 )
 # HF Gemma-family: fp16 overflows Gemma's logit soft-cap -> inf/nan device-side
 # assert (fanar-2-27b crashed). 'native' reads the repo torch_dtype = bf16.
 declare -A HF_DTYPE=( [fanar-2-27b]=native [gemma-4-31b]=native )
@@ -91,11 +97,11 @@ build_cmd() {  # $1=model $2=engine $3=maxtok ; extra args ($4..) appended
   local m="$1" eng="$2" mt="$3"; shift 3
   if [ "$eng" = "vllm" ]; then
     # fp16 (not auto/bf16): Turing sm_75 has no fast bf16; these 6 are non-Gemma (fp16-safe).
-    local extra=()
+    local extra=() vdt="${VLLM_DTYPE[$m]:-float16}"
     [ -n "${GPU_UTIL[$m]:-}" ] && extra+=(--gpu-memory-utilization "${GPU_UTIL[$m]}")
     [ -n "${MAX_SEQS[$m]:-}" ] && extra+=(--max-num-seqs "${MAX_SEQS[$m]}")
     REPLY_CMD=("$PY" inference_vllm.py --model "$m" --input "$INPUT" --output-dir "$OUTDIR"
-               --prompt "$PROMPT" --allow-thinking --seed 42 --dtype float16
+               --prompt "$PROMPT" --allow-thinking --seed 42 --dtype "$vdt"
                --tensor-parallel 2 --max-tokens "$mt" "${extra[@]}" "$@")
   else   # hf, both GPUs via device_map=auto; Gemma-family -> native(bf16), else fp16
     local dt="${HF_DTYPE[$m]:-fp16}"
