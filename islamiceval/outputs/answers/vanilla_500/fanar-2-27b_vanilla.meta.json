@@ -1,0 +1,22 @@
+{
+  "model": "fanar-2-27b",
+  "model_id": "QCRI/Fanar-2-27B-Instruct",
+  "dtype": "bfloat16",
+  "attn": "sdpa",
+  "seed": 42,
+  "prompt": "vanilla",
+  "allow_thinking": true,
+  "gen_config": {
+    "do_sample": true,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": null
+  },
+  "max_tokens": 2048,
+  "peak_vram_gb": {
+    "cuda:0": 30.36,
+    "cuda:1": 31.26
+  },
+  "peak_vram_total_gb": 61.62,
+  "n_answers": 500
+}

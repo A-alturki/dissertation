@@ -1,0 +1,24 @@
+{
+  "model": "acegpt-32b",
+  "model_id": "FreedomIntelligence/AceGPT-v2-32B-Chat",
+  "engine": "vllm",
+  "dtype": "float16",
+  "tensor_parallel": 2,
+  "attention_backend": "TRITON_ATTN",
+  "gpu_memory_utilization": 0.7,
+  "seed": 42,
+  "prompt": "vanilla",
+  "allow_thinking": true,
+  "gen_config": {
+    "do_sample": true,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "max_tokens": 3000
+  },
+  "peak_vram_gb": {
+    "cuda:0": 0.0,
+    "cuda:1": 0.0
+  },
+  "peak_vram_total_gb": 0.0,
+  "n_answers": 500
+}

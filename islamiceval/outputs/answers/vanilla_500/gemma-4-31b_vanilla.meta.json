@@ -1,0 +1,22 @@
+{
+  "model": "gemma-4-31b",
+  "model_id": "google/gemma-4-31B-it",
+  "dtype": "float16",
+  "attn": "sdpa",
+  "seed": 42,
+  "prompt": "vanilla",
+  "allow_thinking": true,
+  "gen_config": {
+    "do_sample": true,
+    "temperature": 1.0,
+    "top_p": 0.95,
+    "top_k": 64
+  },
+  "max_tokens": 2048,
+  "peak_vram_gb": {
+    "cuda:0": 36.43,
+    "cuda:1": 37.02
+  },
+  "peak_vram_total_gb": 73.45,
+  "n_answers": 500
+}
