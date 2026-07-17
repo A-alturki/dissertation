@@ -80,6 +80,10 @@ declare -A HF_DTYPE=( [fanar-2-27b]=native [gemma-4-31b]=native
 # HF batch size: shrink for the big bf16 models so device_map=auto doesn't OOM on 2x48GB
 # (40B MoE weights alone ~= 80GB). Default 8 for everything else.
 declare -A HF_BSZ=( [qwen3.5-27b]=4 [falcon-h1-34b]=2 [karnak-40b]=1 )
+# HF attention backend override. falcon-h1-34b crashes in the SDPA path
+# ("scaled_dot_product_attention ... size of tensor a (36) must match b (34) at dim 3" =
+# attn-mask length != key length); eager builds the mask differently and sidesteps it.
+declare -A HF_ATTN=( [falcon-h1-34b]=eager )
 HF_HUB="${HF_HOME:-$HOME/.cache/huggingface}/hub"
 
 is_done() {
@@ -112,9 +116,9 @@ build_cmd() {  # $1=model $2=engine $3=maxtok ; extra args ($4..) appended
                --prompt "$PROMPT" --allow-thinking --seed 42 --dtype "$vdt"
                --tensor-parallel 2 --max-tokens "$mt" "${extra[@]}" "$@")
   else   # hf, both GPUs via device_map=auto; Gemma-family + ex-vllm hybrids -> native(bf16)
-    local dt="${HF_DTYPE[$m]:-fp16}" bsz="${HF_BSZ[$m]:-8}"
+    local dt="${HF_DTYPE[$m]:-fp16}" bsz="${HF_BSZ[$m]:-8}" at="${HF_ATTN[$m]:-sdpa}"
     REPLY_CMD=("$PY" inference_hugging_face.py --model "$m" --input "$INPUT" --output-dir "$OUTDIR"
-               --prompt "$PROMPT" --allow-thinking --no-quantize --dtype "$dt" --attn sdpa
+               --prompt "$PROMPT" --allow-thinking --no-quantize --dtype "$dt" --attn "$at"
                --seed 42 --batch-size "$bsz" --max-tokens "$mt" "$@")
   fi
 }
