@@ -1,0 +1,22 @@
+{
+  "model": "karnak-40b",
+  "model_id": "Applied-Innovation-Center/Karnak-40B-v1.0",
+  "dtype": "bfloat16",
+  "attn": "sdpa",
+  "seed": 42,
+  "prompt": "vanilla",
+  "allow_thinking": true,
+  "gen_config": {
+    "do_sample": true,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": null
+  },
+  "max_tokens": 4500,
+  "peak_vram_gb": {
+    "cuda:0": 41.47,
+    "cuda:1": 41.47
+  },
+  "peak_vram_total_gb": 82.94,
+  "n_answers": 500
+}

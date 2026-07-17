@@ -1,0 +1,6 @@
+model	model_id	engine	dtype	attn	seed	do_sample	temperature	top_p	top_k	thinking	max_tokens	peak_vram_total_gb	n_answers
+ministral-3-14b	mistralai/Ministral-3-14B-Instruct-2512-BF16	vllm	float16	TRITON_ATTN	42	True	0.7	0.9		True	3000	0.0	500
+acegpt-32b	FreedomIntelligence/AceGPT-v2-32B-Chat	vllm	float16	TRITON_ATTN	42	True	0.7	0.9		True	3000	0.0	500
+gemma-4-31b	google/gemma-4-31B-it	hf	float16	sdpa	42	True	1.0	0.95	64	True	2048	73.45	500
+fanar-2-27b	QCRI/Fanar-2-27B-Instruct	hf	bfloat16	sdpa	42	True	0.7	0.9	None	True	2048	61.62	500
+karnak-40b	Applied-Innovation-Center/Karnak-40B-v1.0	hf	bfloat16	sdpa	42	True	0.7	0.9	None	True	4500	82.94	500
