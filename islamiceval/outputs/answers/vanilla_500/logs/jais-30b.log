@@ -7,15 +7,15 @@
 System prompt: vanilla  |  allow_thinking=True
 Loaded 500 prompts from ../data/islamiceval2026_RELEASE/batch1_500_questions.json
 Loading jais-30b (inceptionai/jais-family-30b-16k-chat)  quantize=False  dtype=torch.float16  attn=sdpa
-  [attn] sdpa load failed (ImportError: cannot import name 'prune_conv1d_layer' from 'transformers.pytorch_utils' (/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/pytorch_utils.py)); retrying attn=eager
+  [attn] sdpa load failed (ModuleNotFoundError: No module named 'transformers.utils.model_parallel_utils'); retrying attn=eager
 Traceback (most recent call last):
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 489, in main
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 503, in main
     tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype, attn=args.attn)
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 317, in load_model
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 331, in load_model
     return tokenizer, _load(cls, "dtype")       # transformers v5 arg name
                       ^^^^^^^^^^^^^^^^^^^
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 303, in _load
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 317, in _load
     return cls.from_pretrained(model_id, **kw)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 378, in from_pretrained
@@ -28,22 +28,22 @@ Traceback (most recent call last):
     module_spec.loader.exec_module(module)
   File "<frozen importlib._bootstrap_external>", line 995, in exec_module
   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
-  File "/mnt/raid1/ws/aalturki/huggingface_cache/modules/transformers_modules/inceptionai/jais_hyphen_family_hyphen_30b_hyphen_16k_hyphen_chat/369f88eeee4d313155f1b1dca4ebec90f9f9f2a4/modeling_jais.py", line 38, in <module>
-    from transformers.pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-ImportError: cannot import name 'prune_conv1d_layer' from 'transformers.pytorch_utils' (/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/pytorch_utils.py). Did you mean: 'prune_linear_layer'?
+  File "/mnt/raid1/ws/aalturki/huggingface_cache/modules/transformers_modules/inceptionai/jais_hyphen_family_hyphen_30b_hyphen_16k_hyphen_chat/369f88eeee4d313155f1b1dca4ebec90f9f9f2a4/modeling_jais.py", line 45, in <module>
+    from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+ModuleNotFoundError: No module named 'transformers.utils.model_parallel_utils'
 
 During handling of the above exception, another exception occurred:
 
 Traceback (most recent call last):
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 609, in <module>
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 626, in <module>
     main()
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 494, in main
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 508, in main
     tokenizer, model = load_model(model_id, quantize=not args.no_quantize, dtype=load_dtype, attn="eager")
                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 317, in load_model
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 331, in load_model
     return tokenizer, _load(cls, "dtype")       # transformers v5 arg name
                       ^^^^^^^^^^^^^^^^^^^
-  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 303, in _load
+  File "/home/aalturki/Desktop/dissertation/islamiceval/scripts/inference_hugging_face.py", line 317, in _load
     return cls.from_pretrained(model_id, **kw)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/models/auto/auto_factory.py", line 378, in from_pretrained
@@ -56,6 +56,6 @@ Traceback (most recent call last):
     module_spec.loader.exec_module(module)
   File "<frozen importlib._bootstrap_external>", line 995, in exec_module
   File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
-  File "/mnt/raid1/ws/aalturki/huggingface_cache/modules/transformers_modules/inceptionai/jais_hyphen_family_hyphen_30b_hyphen_16k_hyphen_chat/369f88eeee4d313155f1b1dca4ebec90f9f9f2a4/modeling_jais.py", line 38, in <module>
-    from transformers.pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
-ImportError: cannot import name 'prune_conv1d_layer' from 'transformers.pytorch_utils' (/home/aalturki/Desktop/dissertation/islamiceval/venv/lib/python3.12/site-packages/transformers/pytorch_utils.py). Did you mean: 'prune_linear_layer'?
+  File "/mnt/raid1/ws/aalturki/huggingface_cache/modules/transformers_modules/inceptionai/jais_hyphen_family_hyphen_30b_hyphen_16k_hyphen_chat/369f88eeee4d313155f1b1dca4ebec90f9f9f2a4/modeling_jais.py", line 45, in <module>
+    from transformers.utils.model_parallel_utils import assert_device_map, get_device_map
+ModuleNotFoundError: No module named 'transformers.utils.model_parallel_utils'
