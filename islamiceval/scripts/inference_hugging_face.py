@@ -61,6 +61,12 @@ THINKING_KWARGS = {
     "qwen3-14b":             {"enable_thinking": False},
     "qwen3-30b-a3b":         {"enable_thinking": False},
     "qwen3-32b":             {"enable_thinking": False},
+    "qwen3.5-0.8b":          {"enable_thinking": False},
+    "qwen3.5-2b":            {"enable_thinking": False},
+    "qwen3.5-4b":            {"enable_thinking": False},
+    "qwen3.5-9b":            {"enable_thinking": False},
+    "qwen3.5-27b":           {"enable_thinking": False},
+    "qwen3.5-35b-a3b":       {"enable_thinking": False},
     # Gemma 4 has a built-in thinking mode — disable for clean citation answers.
     "gemma-4-e4b":           {"enable_thinking": False},
     "gemma-4-12b":           {"enable_thinking": False},
@@ -283,6 +289,10 @@ MODELS = {
     "ministral-3-14b":       "mistralai/Ministral-3-14B-Instruct-2512-BF16",  # BF16 repo (NOT the FP8 default); multimodal->text path
     # "fanar-2-27b" already above (Gemma3ForCausalLM — bf16)
     # "gemma-4-31b"  already above -> "google/gemma-4-31B-it" (multimodal->text path; bf16)
+    "qwen3.5-0.8b":          "Qwen/Qwen3.5-0.8B",                             # dense, multimodal->text path; thinking-capable
+    "qwen3.5-2b":            "Qwen/Qwen3.5-2B",                               # dense, multimodal->text path; thinking-capable
+    "qwen3.5-4b":            "Qwen/Qwen3.5-4B",                               # dense, multimodal->text path; thinking-capable
+    "qwen3.5-9b":            "Qwen/Qwen3.5-9B",                               # dense, multimodal->text path; thinking-capable
     "qwen3.5-27b":           "Qwen/Qwen3.5-27B",                              # dense, multimodal->text path; thinking-capable
     "karnak-40b":            "Applied-Innovation-Center/Karnak-40B-v1.0",     # Qwen3-MoE arch
     "falcon-h1-34b":         "tiiuae/Falcon-H1-34B-Instruct",                 # hybrid (Mamba+attn); general (Arabic-34B repo doesn't exist)
