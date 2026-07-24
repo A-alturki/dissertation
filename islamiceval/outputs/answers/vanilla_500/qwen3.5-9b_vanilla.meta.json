@@ -1,0 +1,21 @@
+{
+  "model": "qwen3.5-9b",
+  "model_id": "Qwen/Qwen3.5-9B",
+  "dtype": "bfloat16",
+  "attn": "auto",
+  "seed": 42,
+  "prompt": "vanilla",
+  "allow_thinking": true,
+  "gen_config": {
+    "do_sample": true,
+    "temperature": 0.7,
+    "top_p": 0.9,
+    "top_k": null
+  },
+  "max_tokens": 4500,
+  "peak_vram_gb": {
+    "cuda:0": 26.09
+  },
+  "peak_vram_total_gb": 26.09,
+  "n_answers": 500
+}

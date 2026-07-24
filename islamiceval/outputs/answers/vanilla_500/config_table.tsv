@@ -5,3 +5,5 @@ gemma-4-31b	google/gemma-4-31B-it	hf	float16	sdpa	42	True	1.0	0.95	64	True	2048	
 fanar-2-27b	QCRI/Fanar-2-27B-Instruct	hf	bfloat16	sdpa	42	True	0.7	0.9	None	True	2048	61.62	500
 karnak-40b	Applied-Innovation-Center/Karnak-40B-v1.0	hf	bfloat16	sdpa	42	True	0.7	0.9	None	True	4500	82.94	500
 qwen3.5-27b	Qwen/Qwen3.5-27B	hf	bfloat16	sdpa	42	True	0.6	0.95	20	True	4500	59.02	500
+gemma-4-12b	google/gemma-4-12B-it	hf	bfloat16	auto	42	True	1.0	0.95	64	True	4500	33.86	500
+qwen3.5-9b	Qwen/Qwen3.5-9B	hf	bfloat16	auto	42	True	0.7	0.9	None	True	4500	26.09	500
