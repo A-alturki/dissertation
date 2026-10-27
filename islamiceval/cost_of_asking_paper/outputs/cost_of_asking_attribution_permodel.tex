@@ -1,0 +1,29 @@
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{l rr llll}
+\toprule
+\textbf{Model} & \textbf{$N_{\text{imp}}$} & \textbf{$N_{\text{exp}}$} & \textbf{$\Delta$ Total (pp)} & \textbf{$\Delta$ Selection (pp)} & \textbf{$\Delta$ Quality (pp)} & \textbf{$\Delta$ Volume (pp)} \\
+\midrule
+Llama-3.1-8B & 118 & 1,340 & \sigest{-5.0}{-9.8}{-0.6} & \est{-0.9}{-4.0}{1.9} & \est{-1.5}{-7.8}{4.9} & \sigest{-2.7}{-5.5}{-0.0} \\
+Qwen3-8B & 422 & 1,547 & \sigest{-3.5}{-6.3}{-0.9} & \est{-0.7}{-2.8}{1.4} & \est{-1.5}{-4.8}{1.8} & \est{-1.3}{-3.1}{0.4} \\
+Mistral-7B & 96 & 1,308 & \est{-1.8}{-6.3}{1.3} & \est{-2.4}{-6.2}{0.9} & \est{+0.7}{-4.9}{6.2} & \est{-0.1}{-2.8}{2.0} \\
+Phi-3.5-mini & 75 & 876 & \est{-0.9}{-3.6}{0.5} & \est{-4.2}{-9.3}{0.0} & \est{+4.3}{0.0}{10.6} & \est{-1.0}{-3.9}{1.0} \\
+Command-R-7B & 131 & 1,143 & \est{+0.1}{-7.4}{7.5} & \est{-0.5}{-6.8}{5.6} & \est{+4.7}{-5.2}{15.9} & \est{-4.2}{-10.9}{2.1} \\
+Gemma-3-12B & 204 & 1,922 & \est{+1.8}{-4.0}{7.2} & \est{-1.0}{-5.7}{3.6} & \est{+4.3}{-3.2}{12.0} & \est{-1.6}{-7.9}{4.3} \\
+ALLaM-7B & 282 & 1,693 & \est{+4.9}{-2.4}{12.9} & \est{+3.5}{-1.8}{9.1} & \est{+3.9}{-5.0}{12.5} & \est{-2.5}{-7.2}{2.2} \\
+Fanar-1-9B & 335 & 1,151 & \sigest{+9.7}{2.4}{16.9} & \est{+1.0}{-3.6}{5.5} & \sigest{+14.5}{5.6}{23.3} & \sigest{-5.8}{-9.6}{-2.0} \\
+AceGPT-v2-8B & 60 & 325 & \est{+11.3}{-0.1}{22.0} & \est{+6.7}{-8.2}{20.0} & \est{+7.7}{-10.0}{27.4} & \est{-3.1}{-11.4}{3.5} \\
+Jais-13B & 22 & 222 & \sigest{+40.9}{26.2}{53.3} & \est{-6.6}{-31.2}{17.4} & \sigest{+56.2}{27.3}{84.6} & \est{-8.8}{-18.1}{1.4} \\
+GPT-5.4\fr & 347 & 2,816 & \sigest{+53.8}{45.7}{62.2} & \est{+1.9}{-2.5}{5.8} & \sigest{+49.8}{40.1}{59.5} & \est{+2.0}{-0.1}{4.3} \\
+Gemini3.1-Pro\fr & 735 & 2,186 & \sigest{+54.2}{48.8}{59.5} & \est{+2.6}{-0.4}{5.5} & \sigest{+51.1}{45.0}{56.9} & \est{+0.5}{-0.6}{1.7} \\
+\midrule
+\textbf{Open-weight pooled} & 1,745 & 11,527 & \est{-1.8}{-4.9}{1.1} & \sigest{-4.8}{-7.3}{-2.4} & \sigest{+5.8}{2.9}{8.8} & \sigest{-2.8}{-4.9}{-0.7} \\
+\textbf{Frontier pooled} & 1,082 & 5,002 & \sigest{+53.9}{48.6}{59.1} & \sigest{+2.4}{0.0}{4.7} & \sigest{+50.7}{44.9}{56.5} & \est{+0.8}{-0.2}{2.0} \\
+\bottomrule
+\end{tabular}
+\caption{Per-model decomposition of the change in the share of citations that are \emph{correctly attributed}, from the implicit to the explicit prompt. Selection represents citations under shared questions. Quality represents first shared citations. Volume represents explicit-only citations beyond the implicit count. $N_{\text{imp}}$ and $N_{\text{exp}}$ are the citation counts the estimate rests on. Values are estimated changes with 95\% confidence intervals from a question-level cluster bootstrap (8,000 resamples); bold estimates have intervals excluding zero. \fr marks frontier models.}
+\label{tab:cost_of_asking_attribution}
+\end{table*}

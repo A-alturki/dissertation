@@ -44,21 +44,26 @@ def main():
     ap = argparse.ArgumentParser(description="Merge all vanilla_500 per-model answers into one json")
     ap.add_argument("--dir", default=VDIR, help="vanilla_500 folder")
     ap.add_argument("--out", default=os.path.join(VDIR, "vanilla_all_answers.json"))
+    ap.add_argument("--pattern", default="*_vanilla.json",
+                    help="glob for per-model files (use '*_vanilla_clean.json' for clean_answers output)")
+    ap.add_argument("--no-clean", action="store_true",
+                    help="do NOT re-apply the light drop filter (inputs already cleaned by clean_answers.py)")
     args = ap.parse_args()
 
-    files = sorted(glob.glob(os.path.join(args.dir, "*_vanilla.json")))
+    files = sorted(glob.glob(os.path.join(args.dir, args.pattern)))
     if not files:
-        sys.exit(f"no *_vanilla.json files in {args.dir}")
+        sys.exit(f"no {args.pattern} files in {args.dir}")
 
+    tag = "_vanilla_clean.json" if "clean" in args.pattern else "_vanilla.json"
     kept, dropped = [], Counter()
     per_model = Counter()
     for fp in files:
         rows = json.load(open(fp, encoding="utf-8"))
         rows = rows if isinstance(rows, list) else list(rows.values())
         for r in rows:
-            model = r.get("model") or os.path.basename(fp).replace("_vanilla.json", "")
+            model = r.get("model") or os.path.basename(fp).replace(tag, "")
             ans = r.get("answer", "")
-            reason = bad(ans)
+            reason = None if args.no_clean else bad(ans)
             if reason:
                 dropped[f"{model}:{reason}"] += 1
                 continue

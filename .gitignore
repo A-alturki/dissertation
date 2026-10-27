@@ -1,3 +1,44 @@
+# ---------------------------------------------------------------- secrets --
+.env
+*.key
+
+# ------------------------------------------------------------- HELD-OUT ----
+# The shared-task test split and everything derived from it stay private.
+# test.jsonl was tracked before this rule; untracking it does NOT remove it
+# from earlier commits (see README, "Publishing note").
+islamiceval/data/islamiceval2026_RELEASE/test.jsonl
+islamiceval/data/islamiceval2026_test_set/
+islamiceval/data/islamiceval2026_RELEASE_correction/test_corrected.jsonl
+islamiceval/data/islamiceval2026_RELEASE_correction/**/test_corrected_*.jsonl
+islamiceval/outputs/answers/ansari_test_500/
+**/*test_set*/
+**/_scorer_test_bases.json
+islamiceval/data/islamiceval2026_RELEASE/ansari_test_500.json
+
+# ------------------------------------------------------- local / scratch ---
+_archive/
+**/scratch/
+*.out
+out[0-9].txt
+
+# Dissertation submission archive -- a separate deliverable, 240 MB.
+PROJECT/
+
+# --------------------------------------------------------------- reading ---
 IslamicEval_2026_submitted_proposal.pdf
+Reference_diss_1.pdf
+Reference_diss_2.pdf
 islamiceval/DISSERTATION_REFERENCE.md
 islamiceval/outputs/classification/question_labels.json
+
+# ---------------------------------------------------------------- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# -------------------------------------------------------------------- OS ---
+.DS_Store
+Thumbs.db

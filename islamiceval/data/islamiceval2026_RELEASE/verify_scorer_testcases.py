@@ -32,7 +32,9 @@ def decide(seg, gold_cell, key):
     gold = {normalize(g, seg) for g in gold_cell.split(SEP) if g.strip()}
     if key not in plook:
         return False
-    pr = {normalize(p, seg) for p in plook[key].split(SEP) if p.strip()}
+    # mirror the scorer: the prediction is ONE literal answer (never split on SEP)
+    pt = plook[key]
+    pr = {normalize(pt, seg)} if pt.strip() else set()
     return bool(gold & pr)
 
 # ---- 1) per-case ----

@@ -1,0 +1,36 @@
+% Implicit condition. Every number carries its source for tracing.
+% "classified" excludes the unclassified bucket; totals are given in summary.md.
+
+\paragraph{What attribution errors look like.}
+Under the implicit prompt, misattributed Quranic citations overwhelmingly name
+the wrong chapter rather than the wrong position within it: 75.7\%
+% source: summary.md, Task 1 > Implicit > Quran, wrong surah 187/247 classified
+of classified cases name a different surah, against 13.4\%
+% source: summary.md, Task 1 > Implicit > Quran, right surah wrong verse 33/247
+that name the right surah with the wrong verse number. A further 7.3\%
+% source: summary.md, Task 1 > Implicit > Quran, nonexistent/misspelled 18/247
+give a surah name that resolves to no surah. Hadith citations behave the same
+way: 83.2\%
+% source: summary.md, Task 1 > Implicit > Hadith, wrong collection 119/143 classified
+of classified misattributions name a collection that does not contain the
+report, while 16.1\%
+% source: summary.md, Task 1 > Implicit > Hadith, overclaim 23/143
+overclaim, naming two collections or \textit{muttafaq `alayh} when only one
+source carries the text. Among the collections named on misattributed Hadith,
+\d{S}a\d{h}\=i\d{h} Muslim (32.9\%)
+% source: summary.md, Task 2 > Implicit collections table, 92/280 mentions
+and \d{S}a\d{h}\=i\d{h} al-Bukh\=ar\=i (23.9\%)
+% source: summary.md, Task 2 > Implicit collections table, 67/280 mentions
+are the most frequent. Isnad errors are rarer, at 91 citations,
+% source: misattributions.csv, condition=implicit AND isnad_wrong=True
+and concentrate on a single Companion, Ab\=u Hurayra (27).
+% source: summary.md, Task 2 > Companions wrongly named (implicit), 27/66
+Misattribution rates differ sharply between tiers: both frontier models stay
+near zero (Gemini-3.1-Pro 0.6\%, $n=323$; GPT-5.4 1.3\%, $n=152$),
+% source: summary.md, Task 3 > Implicit, Wilson CIs [0.2,2.2] and [0.4,4.7]
+while among matched open-weight models only ALLaM-7B (15.8\%, $n=221$) and
+Fanar-1-9B (34.8\%, $n=201$)
+% source: summary.md, Task 3 > Implicit, Wilson CIs [11.6,21.2] and [28.6,41.6]
+have denominators above 200; the remaining eight supply too few attributed
+citations under this prompt for a stable rate.
+% source: summary.md, Task 3 > Implicit, n column (Qwen3-8B 83 down to Jais-13B 4)

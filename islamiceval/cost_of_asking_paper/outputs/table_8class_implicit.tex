@@ -1,0 +1,42 @@
+\begin{table*}[t]
+\centering
+\scriptsize
+\setlength{\tabcolsep}{1.5pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular}{l r @{\hspace{6pt}} rrrr @{\hspace{6pt}} rrrr @{\hspace{6pt}} rrr}
+\toprule
+ &  & \multicolumn{4}{c}{\textbf{Correct text}} & \multicolumn{4}{c}{\textbf{Corrupted text}} & \multicolumn{3}{c}{\textbf{Fabricated}} \\
+\cmidrule(lr){3-6}\cmidrule(lr){7-10}\cmidrule(lr){11-13}
+\textbf{Model} & \textbf{N} & \textbf{All} & \textbf{Correct} & \textbf{Misattr.} & \textbf{Unsourced} & \textbf{All} & \textbf{Corruption} & \textbf{Misattr.} & \textbf{Unsourced} & \textbf{All} & \textbf{Attributed} & \textbf{Bare} \\
+\midrule
+AceGPT-v2-8B & 60 & \textbf{36.7\%} & 8.3\% & 10.0\% & 18.3\% & \textbf{25.0\%} & 8.3\% & 6.7\% & 10.0\% & \textbf{38.3\%} & 23.3\% & 15.0\% \\
+ALLaM-7B & 282 & \textbf{80.1\%} & 58.5\% & 9.2\% & 12.4\% & \textbf{13.5\%} & 7.4\% & 3.2\% & 2.8\% & \textbf{6.4\%} & 3.5\% & 2.8\% \\
+Command-R-7B & 131 & \textbf{26.7\%} & 9.2\% & 5.3\% & 12.2\% & \textbf{20.6\%} & 9.2\% & 6.9\% & 4.6\% & \textbf{52.7\%} & 37.4\% & 15.3\% \\
+Fanar-1-9B & 335 & \textbf{66.9\%} & 31.0\% & 14.9\% & 20.9\% & \textbf{19.4\%} & 8.1\% & 6.0\% & 5.4\% & \textbf{13.7\%} & 9.0\% & 4.8\% \\
+Gemma-3-12B & 204 & \textbf{23.0\%} & 7.8\% & 4.9\% & 10.3\% & \textbf{23.5\%} & 10.8\% & 7.4\% & 5.4\% & \textbf{53.4\%} & 43.6\% & 9.8\% \\
+Jais-13B & 22 & \textbf{31.8\%} & 4.5\% & 0.0\% & 27.3\% & \textbf{27.3\%} & 4.5\% & 9.1\% & 13.6\% & \textbf{40.9\%} & 22.7\% & 18.2\% \\
+Llama-3.1-8B & 118 & \textbf{29.7\%} & 3.4\% & 6.8\% & 19.5\% & \textbf{10.2\%} & 5.1\% & 5.1\% & 0.0\% & \textbf{60.2\%} & 50.0\% & 10.2\% \\
+Mistral-7B & 96 & \textbf{9.4\%} & 2.1\% & 2.1\% & 5.2\% & \textbf{6.2\%} & 1.0\% & 1.0\% & 4.2\% & \textbf{84.4\%} & 65.6\% & 18.8\% \\
+Phi-3.5-mini & 75 & \textbf{21.3\%} & 1.3\% & 4.0\% & 16.0\% & \textbf{4.0\%} & 0.0\% & 1.3\% & 2.7\% & \textbf{74.7\%} & 64.0\% & 10.7\% \\
+Qwen3-8B & 422 & \textbf{17.8\%} & 5.2\% & 7.6\% & 5.0\% & \textbf{10.2\%} & 3.6\% & 3.3\% & 3.3\% & \textbf{72.0\%} & 55.2\% & 16.8\% \\
+GPT-5.4\fr & 347 & \textbf{91.6\%} & 38.0\% & 0.6\% & 53.0\% & \textbf{8.4\%} & 5.2\% & 0.0\% & 3.2\% & \textbf{0.0\%} & 0.0\% & 0.0\% \\
+Gemini3.1-Pro\fr & 735 & \textbf{90.9\%} & 38.8\% & 0.1\% & 52.0\% & \textbf{9.0\%} & 4.9\% & 0.1\% & 3.9\% & \textbf{0.1\%} & 0.0\% & 0.1\% \\
+\midrule
+\multicolumn{13}{l}{\emph{Newer open-weight models (implicit prompt only)}} \\
+AceGPT-v2-32B & 73 & \textbf{38.4\%} & 13.7\% & 2.7\% & 21.9\% & \textbf{13.7\%} & 4.1\% & 6.8\% & 2.7\% & \textbf{47.9\%} & 21.9\% & 26.0\% \\
+Fanar-2-27B & 305 & \textbf{73.4\%} & 44.6\% & 9.8\% & 19.0\% & \textbf{16.7\%} & 8.9\% & 2.0\% & 5.9\% & \textbf{9.8\%} & 5.6\% & 4.3\% \\
+Gemma-4-12B & 231 & \textbf{66.7\%} & 20.3\% & 4.8\% & 41.6\% & \textbf{16.9\%} & 4.3\% & 3.0\% & 9.5\% & \textbf{16.5\%} & 6.5\% & 10.0\% \\
+Gemma-4-31B & 320 & \textbf{85.0\%} & 38.1\% & 1.6\% & 45.3\% & \textbf{12.8\%} & 6.9\% & 1.2\% & 4.7\% & \textbf{2.2\%} & 0.3\% & 1.9\% \\
+Karnak-40B & 168 & \textbf{73.2\%} & 42.9\% & 6.5\% & 23.8\% & \textbf{17.3\%} & 6.0\% & 6.0\% & 5.4\% & \textbf{9.5\%} & 6.5\% & 3.0\% \\
+Ministral-3-14B & 593 & \textbf{34.1\%} & 19.6\% & 8.8\% & 5.7\% & \textbf{26.6\%} & 12.6\% & 9.4\% & 4.6\% & \textbf{39.3\%} & 33.7\% & 5.6\% \\
+Qwen3.5-9B & 357 & \textbf{46.8\%} & 23.8\% & 9.2\% & 13.7\% & \textbf{20.2\%} & 8.4\% & 4.2\% & 7.6\% & \textbf{33.1\%} & 18.5\% & 14.6\% \\
+Qwen3.5-27B & 467 & \textbf{59.1\%} & 35.5\% & 5.6\% & 18.0\% & \textbf{28.1\%} & 12.4\% & 7.7\% & 7.9\% & \textbf{12.8\%} & 7.5\% & 5.4\% \\
+\midrule
+\textbf{Open-weight (10)} & 1,745 & \textbf{39.9\%} & 19.0\% & 8.3\% & 12.6\% & \textbf{15.1\%} & 6.3\% & 4.6\% & 4.1\% & \textbf{45.0\%} & 34.4\% & 10.7\% \\
+\textbf{Frontier (2)} & 1,082 & \textbf{91.1\%} & 38.5\% & 0.3\% & 52.3\% & \textbf{8.8\%} & 5.0\% & 0.1\% & 3.7\% & \textbf{0.1\%} & 0.0\% & 0.1\% \\
+\textbf{Extended panel (8)} & 2,514 & \textbf{57.5\%} & 30.0\% & 6.8\% & 20.8\% & \textbf{21.1\%} & 9.3\% & 5.5\% & 6.2\% & \textbf{21.4\%} & 14.4\% & 7.0\% \\
+\bottomrule
+\end{tabular}
+\caption{Per-model distribution over the eight terminal classes of the citation taxonomy (Figure~\ref{fig:decision-tree}), as percentage of that model's $N$ citations. The bold \textbf{All} column in each group is the model's overall rate for that textual-fidelity class and equals the sum of the leaf columns beside it; the three \textbf{All} columns sum to 100\%, as do the eight leaf columns, in both cases to within rounding. Counts are recoverable as the percentage of $N$. Citations were generated under the implicit prompt. The implicit condition was never released and has no held-out split, so all of it is used; the eight models below the rule were run under this prompt only. $N$ counts classifiable citations: 5 annotations carry no Ayah or Matn segment and so have no textual-fidelity label. Column groups give the textual-fidelity axis; the columns within each group give the attributional one, so the eight leaves of Figure~\ref{fig:decision-tree} read, left to right: Correct Citation, Misattribution, Unsourced Quotation, Textual Corruption, Corrupted Misattribution, Unsourced Corruption, Attributed Fabrication, Bare Fabrication. \emph{Unsrc.} denotes a citation that offered no source at all; attribution is judged only where a source was offered, so a component the model never supplied is not counted against it, and a Hadith citation counts as correctly attributed only if every component it did supply is correct. Under \emph{Fabricated} there is no attribution to judge, so the split is merely whether a source was offered. \fr marks frontier models.}
+\label{tab:eight_class_implicit}
+\end{table*}

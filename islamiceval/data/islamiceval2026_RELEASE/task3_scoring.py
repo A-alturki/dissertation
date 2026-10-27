@@ -46,9 +46,9 @@ def standardize_quran(text):
     text = str(text)
     for a, b in _FOLD.items():
         text = text.replace(a, b)
-    text = text.replace('َا', 'ا').replace('ِي', 'ي').replace('ُو', 'و') 
-    text = text.replace('الْ', 'ال')                                       
-    text = text.replace('ْ', '')                                          
+    text = text.replace('َا', 'ا').replace('ِي', 'ي').replace('ُو', 'و')
+    text = text.replace('الْ', 'ال')
+    text = text.replace('ْ', '')
     text = text.replace('اَ', 'ا').replace('اِ', 'ا').replace('لِا', 'لا')
     text = text.replace('اً', 'ًا')
     return _WS.sub(' ', text).strip()
@@ -103,14 +103,18 @@ for _, r in ref_data.iterrows():
     if key not in pred_lookup:
         missing += 1
         continue
-    pred = {normalize(p, seg_type) for p in pred_lookup[key].split(SEP) if p.strip()}
-    if gold & pred:                       # any acceptable correction matched
+    # Predictions must be a single answ -- unlike gold, do NOT split on SEP here.
+    # A prediction padded with " ||| "-joined guesses is compared as one literal
+    # string and will not match any single gold variant.
+    pred_text = pred_lookup[key]
+    pred = {normalize(pred_text, seg_type)} if pred_text.strip() else set()
+    if gold & pred:                       # matches one of the accepted gold corrections
         per_type[seg_type][0] += 1
 
 per_type_acc = {t: c / n for t, (c, n) in sorted(per_type.items()) if n > 0}
 tot_correct = sum(c for c, _ in per_type.values())
 tot_rows = sum(n for _, n in per_type.values())
-overall = tot_correct / tot_rows if tot_rows else 0.0   
+overall = tot_correct / tot_rows if tot_rows else 0.0
 
 print('Scores:')
 scores = {'accuracy': overall}

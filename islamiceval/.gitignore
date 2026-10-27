@@ -11,6 +11,12 @@ data/corpora/*
 !outputs/answers/vanilla_500/*
 !outputs/answers/ansari_test_500/*
 !data/islamiceval2026_RELEASE/*.json
+# ...but never the held-out test material, which the line above would re-include.
+data/islamiceval2026_RELEASE/ansari_test_500.json
+data/islamiceval2026_RELEASE/_scorer_test_bases.json
+data/islamiceval2026_RELEASE/test.jsonl
+data/islamiceval2026_test_set/
+outputs/answers/ansari_test_500/
 
 # ignnore all .csv files
 *.csv

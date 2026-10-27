@@ -60,7 +60,7 @@ case("Q11_multi_last",   "Ayah", SEP.join(MA), MA[-1],          True,  "multi-va
 case("Q12_multi_none",   "Ayah", SEP.join(MA), SA,              False, "multi-variant gold: match NONE -> wrong")
 case("Q13_whitespace",   "Ayah", SA, messy_ws(SA),             True,  "leading/trailing/inner whitespace collapsed")
 case("Q14_missing",      "Ayah", SA, None,                      False, "no prediction row for this key -> counted wrong (missing)")
-case("Q15_pred_multi",   "Ayah", SA, SEP.join([MA[0], SA]),     True,  "prediction is multi-variant; its 2nd part matches gold")
+case("Q15_pred_multi",   "Ayah", SA, SEP.join([MA[0], SA]),     False, "multi-guess prediction is scored as ONE literal string (anti-gaming) -> WRONG")
 case("Q16_pred_segtype", "Ayah", SA, SA,                        True,  "pred row mislabels Segment_Type=matn; scorer uses REF type -> still correct")
 case("Q17_sukun_default","Ayah", SA, strip_sukun(SA),           True,  "removing redundant sukun tolerated by standardization")
 
@@ -77,7 +77,7 @@ case("H09_multi_first",  "matn", SEP.join(MM), MM[0],           True,  "multi-va
 case("H10_multi_second", "matn", SEP.join(MM), MM[1],           True,  "multi-variant gold: match SECOND variant")
 case("H11_multi_last",   "matn", SEP.join(MM), MM[-1],          True,  "multi-variant gold: match LAST variant")
 case("H12_multi_none",   "matn", SEP.join(MM), SM,              False, "multi-variant gold: match NONE -> wrong")
-case("H13_pred_multi_last","matn", SM, SEP.join([MM[0], SM]),   True,  "prediction multi-variant; its LAST part matches gold")
+case("H13_pred_multi_last","matn", SM, SEP.join([MM[0], SM]),   False, "multi-guess prediction is scored as ONE literal string (anti-gaming) -> WRONG")
 case("H14_alef_fold",    "matn", SM, plain_alef(SM),            True,  "hamza-alef folded for hadith too")
 case("H15_missing",      "matn", SM, None,                      False, "no prediction row -> counted wrong (missing)")
 case("H16_all_lenient",  "matn", SM, add_punct(add_tatweel(strip_diac(SM))), True, "combined: undiacritized+tatweel+punct still matches")

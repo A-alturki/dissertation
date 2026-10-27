@@ -1,0 +1,65 @@
+% Representative attribution errors. Arabic set with arabtex \<...>.
+% All rows are implicit-condition citations; the fabrication row is included to
+% contrast an attributed fabrication with the misattribution rows above it.
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}p{2.1cm} p{4.2cm} p{2.2cm} p{2.6cm} p{3.3cm}@{}}
+\toprule
+\textbf{Error type} & \textbf{Cited text (truncated)} & \textbf{Claimed} &
+\textbf{Correct} & \textbf{Gloss / model} \\
+\midrule
+
+Wrong surah &
+\<wa-laa taqtuluu anfusakum inna allaha kaana bikum rahiiman> &
+\<suurat aal `imraan, 130> &
+An-Nisa 4:29 &
+``And do not kill yourselves; God is merciful to you.'' ALLaM-7B \\
+\addlinespace
+
+Right surah, wrong verse &
+\<al-rijaalu qawwaamuuna `alaa al-nisaa'i bimaa faddala allahu ba`dahum> &
+\<suurat al-nisaa', 36> &
+An-Nisa 4:34 &
+``Men are the maintainers of women, by what God has favoured.'' ALLaM-7B \\
+\addlinespace
+
+Wrong collection &
+\<talabu al-`ilmi fariidatun `alaa kulli muslim> &
+\<rawaahu al-bukhaarii> &
+Sunan Ibn Majah &
+``Seeking knowledge is an obligation upon every Muslim.'' Llama-3.1-8B \\
+\addlinespace
+
+Overclaim &
+\<laa darara wa-laa diraar> &
+\<muttafaq `alayh> &
+In neither \d{S}a\d{h}\=i\d{h}; recorded elsewhere &
+``There shall be no harm nor reciprocating harm.'' Ministral-3-14B \\
+\addlinespace
+
+Wrong Companion &
+\<laysa lanaa mathalu al-saw'i, alladhii ya`uudu fii hibatihi ka-al-kalbi> &
+isnad: \<abii dharr>; source \<al-bukhaarii> (correct) &
+Ibn `Abbas &
+``We have no evil likeness: one who takes back a gift is like a dog.'' ALLaM-7B \\
+\addlinespace
+
+Attributed fabrication &
+\<laa yatakallafuu; fa-inna shiddata al-\d{h}arri min ma`\d{s}iyati ibliis> &
+\<rawaahu ibn maajah wa-\d{h}assanahu al-albaanii> &
+No such hadith; attribution not applicable &
+``Do not burden yourselves; the severity of heat is from Iblis's disobedience.'' AceGPT-v2-8B \\
+
+\bottomrule
+\end{tabular}
+\caption{Representative attribution errors, implicit condition. The claimed
+attribution is the span the model produced; the correct attribution is taken
+from the annotator's reason field. In the wrong-Companion row the claimed
+collection is correct and only the isnad is wrong. The final row is a
+fabricated text carrying a specific, authentic-looking source, for which
+attribution is undefined.}
+\label{tab:attribution-examples}
+\end{table*}
