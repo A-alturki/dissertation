@@ -58,23 +58,3 @@ analysis/
   attribution_errors/     qualitative analysis of attribution errors
 paper/                    the submission PDF
 ```
-
-## What is not here
-
-The held-out **test split** and everything derived from it are excluded from the working
-tree by `.gitignore`: `test.jsonl`, `islamiceval2026_test_set/`, `ansari_test_500.json`,
-the Ansari test answers, and the test correction files. They stay local so the shared
-task's evaluation data is not part of the published tree.
-
-Also excluded: the dissertation submission archive (`PROJECT/`), API keys, and scratch
-output.
-
-## Cloning
-
-The repository carries the full generation history, so a clone is large (roughly 1 GB) and
-the biggest single file is 81 MB. To read the code and results without the data, use a
-shallow, filtered clone:
-
-```bash
-git clone --depth 1 --filter=blob:limit=5m <url>
-```
